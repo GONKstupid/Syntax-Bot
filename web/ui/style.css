@@ -1,0 +1,591 @@
+/*
+ * Syntax Bot — Oberfläche
+ *
+ * Designsprache nach der Spec („Design & UI-Konzept"): monochromes
+ * Grundsystem mit genau einem roten Akzent, Haarlinien, Dot-Matrix-
+ * Typografie, sichtbare Technik statt dekorativer Flächen — inspiriert von
+ * Nothing OS, umgesetzt nur mit frei lizenzierten Mitteln.
+ *
+ * Kanonische Quelle aller Werte: design/tokens.json (Herkunft:
+ * design/STYLE-SOURCE.md), eingebunden über die generierte Datei
+ * web/ui/tokens.css (`npm run tokens`).
+ *
+ * LRS-Regeln aus der Spec:
+ *  - Body 20 px (≥ 17 px, 4-px-Raster), Zeilenhöhe 1,6; Code/Diff 1,5.
+ *  - Kontraste WCAG AA (≥ 4,5:1); Fokus-Ring 2 px in --accent.
+ *  - Zustände nie über Farbe allein: immer Symbol + Text doppelt kodiert.
+ *  - Animationen nur opacity/fade, ≤ 150 ms; prefers-reduced-motion
+ *    schaltet sie ganz ab.
+ */
+
+/* Generierte Farb-Tokens — Quelle: design/tokens.json. */
+@import url("tokens.css");
+
+/* Schriften: Dateien unter web/ui/fonts/ ablegen — siehe design/STYLE-SOURCE.md. */
+@font-face {
+	font-family: "Doto";
+	src: local("Doto"), url("fonts/doto-var.woff2") format("woff2");
+	font-weight: 100 900;
+	font-display: swap;
+}
+
+@font-face {
+	font-family: "JetBrains Mono";
+	src: url("fonts/JetBrainsMono-Regular.woff2") format("woff2");
+	font-weight: 400;
+	font-style: normal;
+	font-display: swap;
+}
+
+@font-face {
+	font-family: "JetBrains Mono";
+	src: url("fonts/JetBrainsMono-Bold.woff2") format("woff2");
+	font-weight: 700;
+	font-style: normal;
+	font-display: swap;
+}
+
+@font-face {
+	font-family: "OpenDyslexic";
+	src: local("OpenDyslexic"), url("fonts/opendyslexic-regular.woff2") format("woff2");
+	font-weight: 400;
+	font-display: swap;
+}
+
+/* Ergänzende Tokens, die tokens.json bewusst nicht führt. */
+:root {
+	--accent-text: #ffffff;
+	--schrift-display: "Doto", ui-monospace, "Cascadia Code", Consolas, monospace;
+	--schrift-body: "JetBrains Mono", ui-monospace, "Cascadia Code", Consolas, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+	:root {
+		--accent-text: #0a0a0a;
+	}
+}
+
+/* LRS-Schrift: umschaltbare OpenDyslexic-Alternative für den Fließtext.
+   Anzeige/Code/Diff bleiben in der Dot-Matrix-Welt der Spec. */
+body.schrift-lrs {
+	--schrift-body: "OpenDyslexic", ui-monospace, "Cascadia Code", Consolas, monospace;
+}
+
+* {
+	box-sizing: border-box;
+}
+
+html,
+body {
+	margin: 0;
+	padding: 0;
+}
+
+body {
+	font-family: var(--schrift-body);
+	font-size: calc(20px * var(--font-scale));
+	line-height: 1.6;
+	/* JetBrains Mono ohne Ligaturen — für Code und Text gleich. */
+	font-variant-ligatures: none;
+	background-color: var(--bg);
+	background-image: radial-gradient(var(--punkt) 1px, transparent 1.4px);
+	background-size: 24px 24px;
+	color: var(--text);
+	display: flex;
+	flex-direction: column;
+	min-height: 100vh;
+}
+
+:focus-visible {
+	outline: var(--fokus);
+	outline-offset: 2px;
+}
+
+.visually-hidden {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip: rect(0 0 0 0);
+	white-space: nowrap;
+}
+
+/* --- Kopfzeile ------------------------------------------------------ */
+
+.kopfzeile {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 1rem;
+	padding: 0.75rem 1.25rem;
+	border-bottom: 1px solid var(--border);
+	background: var(--bg);
+}
+
+.wortmarke {
+	font-family: var(--schrift-display);
+	font-size: 24px;
+	font-weight: 700;
+	letter-spacing: 0.14em;
+	margin: 0;
+}
+
+.statusbereich {
+	display: flex;
+	align-items: center;
+	gap: 1rem;
+	font-size: 16px;
+}
+
+/* Modus-Dot-Leiste: aktives Segment in --accent, inaktive ohne Farbe
+   bei 40 % Deckkraft. Das Textlabel daneben ist Pflicht (Spec). */
+.modus-anzeige {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.5rem;
+	font-family: var(--schrift-display);
+	font-weight: 700;
+}
+
+.modus-punkte {
+	letter-spacing: 0.2em;
+	color: var(--accent);
+}
+
+.modus-punkte .punkt--leer {
+	color: var(--text);
+	opacity: 0.4;
+}
+
+.modell-name {
+	color: var(--text-muted);
+}
+
+.nutzer-name {
+	color: var(--text-muted);
+}
+
+.verbindung--getrennt {
+	color: var(--accent);
+	font-weight: 700;
+}
+
+/* --- Chat-Verlauf ---------------------------------------------------- */
+
+.verlauf {
+	flex: 1;
+	width: 100%;
+	max-width: 46rem;
+	margin: 0 auto;
+	padding: 1.5rem 1.25rem 2rem;
+}
+
+.willkommen {
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: 4px;
+	padding: 1.25rem 1.5rem;
+}
+
+.modus-liste {
+	list-style: none;
+	margin: 0.75rem 0 0;
+	padding: 0;
+	display: grid;
+	gap: 0.4rem;
+}
+
+code {
+	font-family: var(--schrift-body);
+	font-variant-ligatures: none;
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: 4px;
+	padding: 0 0.35em;
+}
+
+.nachricht {
+	margin: 1rem 0;
+	padding: 0.9rem 1.15rem;
+	border-radius: 4px;
+	overflow-wrap: break-word;
+}
+
+.nachricht p {
+	margin: 0.5rem 0;
+}
+
+.nachricht p:first-child {
+	margin-top: 0;
+}
+
+.nachricht p:last-child {
+	margin-bottom: 0;
+}
+
+/* Nutzer-Nachricht als invertierter Block: monochrom, hohe Signalwirkung. */
+.nachricht--nutzer {
+	background: var(--text);
+	color: var(--bg);
+	margin-left: 12%;
+}
+
+.nachricht--nutzer code {
+	background: color-mix(in srgb, var(--bg) 16%, transparent);
+	border-color: transparent;
+}
+
+.nachricht--agent {
+	background: var(--surface);
+	border: 1px solid var(--border);
+	margin-right: 12%;
+}
+
+.nachricht--hinweis {
+	background: var(--surface);
+	color: var(--text-muted);
+	border: 1px dashed var(--border);
+	font-size: 16px;
+}
+
+.nachricht--fehler {
+	background: var(--surface);
+	color: var(--accent);
+	border: 1px solid var(--accent);
+	font-size: 16px;
+}
+
+.nachricht--werkzeug {
+	background: transparent;
+	border: 1px dashed var(--border);
+	color: var(--text-muted);
+	font-size: 16px;
+	padding: 0.4rem 1rem;
+}
+
+.nachricht pre {
+	font-family: var(--schrift-body);
+	font-size: 16px;
+	line-height: 1.5;
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: 4px;
+	padding: 0.75rem 1rem;
+	overflow-x: auto;
+}
+
+/* --- Eingabebereich --------------------------------------------------- */
+
+.eingabebereich {
+	border-top: 1px solid var(--border);
+	background: var(--bg);
+	padding: 0.75rem 1.25rem 1rem;
+}
+
+.eingabeformular {
+	display: flex;
+	gap: 0.75rem;
+	max-width: 46rem;
+	margin: 0 auto;
+	align-items: flex-end;
+}
+
+.eingabeformular textarea {
+	flex: 1;
+	font: inherit;
+	font-variant-ligatures: none;
+	color: inherit;
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: 4px;
+	padding: 0.6rem 0.85rem;
+	resize: vertical;
+	min-height: 3.2em;
+}
+
+.knopf {
+	font: inherit;
+	font-weight: 700;
+	border: 1px solid var(--border);
+	border-radius: 4px;
+	padding: 0.5rem 1.4rem;
+	min-height: 44px;
+	background: var(--surface);
+	color: var(--text);
+	cursor: pointer;
+}
+
+.knopf--primaer {
+	background: var(--accent);
+	border-color: var(--accent);
+	color: var(--accent-text);
+}
+
+.knopf--sekundaer {
+	background: transparent;
+}
+
+.knopf--klein {
+	min-height: 36px;
+	padding: 0.15rem 0.9rem;
+	font-size: 16px;
+}
+
+.arbeitsanzeige {
+	max-width: 46rem;
+	margin: 0 auto 0.5rem;
+	display: flex;
+	align-items: center;
+	gap: 0.6rem;
+	color: var(--text-muted);
+	font-size: 16px;
+}
+
+/* Arbeitssignal: ausschließlich opacity-basiert (Spec). */
+.punktfolge span {
+	display: inline-block;
+	font-weight: 700;
+	animation: pulsieren 1.4s ease-in-out infinite;
+}
+
+.punktfolge span:nth-child(2) {
+	animation-delay: 0.2s;
+}
+
+.punktfolge span:nth-child(3) {
+	animation-delay: 0.4s;
+}
+
+@keyframes pulsieren {
+	0%, 100% { opacity: 0.25; }
+	50% { opacity: 1; }
+}
+
+@keyframes einblenden {
+	from { opacity: 0; }
+}
+
+/* --- Dialog: Diff-Vorschau, Auswahl, Eingabe ------------------------
+   < 1024 px: zentrierter Dialog. ≥ 1024 px: rechts andockendes Panel
+   neben dem Chat (Spec „Übertragung auf die Deployment-Oberflächen"). */
+
+.dialog-overlay {
+	position: fixed;
+	inset: 0;
+	background: rgba(0, 0, 0, 0.45);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 1.5rem;
+	z-index: 10;
+	animation: einblenden 120ms ease-out;
+}
+
+.dialog {
+	background: var(--bg);
+	color: var(--text);
+	border: 1px solid var(--border);
+	border-radius: 4px;
+	max-width: 56rem;
+	width: 100%;
+	max-height: 85vh;
+	display: flex;
+	flex-direction: column;
+	padding: 1.5rem 1.75rem;
+}
+
+@media (min-width: 1024px) {
+	.dialog-overlay {
+		justify-content: flex-end;
+		align-items: stretch;
+		padding: 0;
+		background: rgba(0, 0, 0, 0.2);
+	}
+
+	.dialog {
+		max-width: min(56rem, 58%);
+		max-height: none;
+		height: 100%;
+		border-radius: 0;
+		border-width: 0 0 0 1px;
+	}
+}
+
+.dialog h2 {
+	margin: 0 0 0.75rem;
+	font-family: var(--schrift-display);
+	font-size: 20px;
+	font-weight: 700;
+	letter-spacing: 0.06em;
+}
+
+.dialog-inhalt {
+	flex: 1;
+	overflow: auto;
+	margin-bottom: 1.25rem;
+}
+
+.dialog-knoepfe {
+	display: flex;
+	gap: 0.75rem;
+	justify-content: flex-end;
+	flex-wrap: wrap;
+}
+
+/* --- Diff-Ansicht ------------------------------------------------------
+   Zeilenmarkierung links als Punkt: ● geändert, ○ unverändert.
+   Fläche 12 % der Signalfarbe + linker Rand 2 px. Kein
+   Syntax-Highlighting — die Monochromie hält den Blick auf der Änderung. */
+
+.diff {
+	font-family: var(--schrift-body);
+	font-size: 16px;
+	line-height: 1.5;
+	border: 1px solid var(--border);
+	border-radius: 4px;
+	overflow-x: auto;
+	background: var(--bg);
+}
+
+.diff-zeile {
+	display: flex;
+	white-space: pre;
+}
+
+.diff-marke {
+	flex: 0 0 1.75em;
+	text-align: center;
+	color: var(--text-muted);
+	user-select: none;
+}
+
+.diff-inhalt {
+	flex: 1;
+	padding-right: 0.75rem;
+}
+
+.diff-zeile--kopf {
+	background: var(--surface);
+	color: var(--text-muted);
+}
+
+.diff-zeile--plus {
+	background: var(--diff-add-flaeche);
+	box-shadow: inset 2px 0 0 var(--diff-add);
+}
+
+.diff-zeile--plus .diff-marke {
+	color: var(--diff-add);
+}
+
+.diff-zeile--minus {
+	background: var(--diff-del-flaeche);
+	box-shadow: inset 2px 0 0 var(--diff-del);
+}
+
+.diff-zeile--minus .diff-marke {
+	color: var(--diff-del);
+}
+
+.dialog-frage {
+	margin-top: 0.9rem;
+	font-weight: 700;
+}
+
+.auswahl-liste {
+	display: grid;
+	gap: 0.5rem;
+}
+
+.auswahl-liste .knopf {
+	text-align: left;
+}
+
+.dialog-eingabefeld {
+	width: 100%;
+	font: inherit;
+	color: inherit;
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: 4px;
+	padding: 0.6rem 0.85rem;
+}
+
+/* --- Einstellungsdialog (BYOM) und Anmeldeseite ---------------------- */
+
+.einstellungen-hinweis {
+	color: var(--text-muted);
+	font-size: 16px;
+	margin: 0 0 1rem;
+}
+
+.einstellungen-zeile {
+	display: grid;
+	gap: 0.25rem;
+	margin-bottom: 0.85rem;
+}
+
+.einstellungen-zeile label {
+	font-size: 16px;
+	font-weight: 700;
+}
+
+.einstellungen-zeile input {
+	font: inherit;
+	font-variant-ligatures: none;
+	color: inherit;
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: 4px;
+	padding: 0.6rem 0.85rem;
+	min-height: 44px;
+}
+
+.einstellungen-liste {
+	width: 100%;
+	font: inherit;
+	font-size: 16px;
+	color: inherit;
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: 4px;
+	padding: 0.35rem;
+}
+
+.einstellungen-liste option {
+	padding: 0.2rem 0.5rem;
+}
+
+/* Anmeldeseite: ruhige, zentrierte Karte mit der Wortmarke. */
+.anmeldung-seite {
+	display: grid;
+	place-items: center;
+}
+
+.anmeldung {
+	max-width: 30rem;
+	margin: 1.5rem;
+	padding: 2rem 2.25rem;
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: 4px;
+	text-align: center;
+}
+
+.anmeldung .wortmarke {
+	margin-bottom: 1rem;
+}
+
+.anmeldung .knopf {
+	display: inline-block;
+	text-decoration: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation: none !important;
+		transition: none !important;
+	}
+}

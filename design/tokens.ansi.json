@@ -1,0 +1,27 @@
+{
+	"name": "syntax-bot-ansi-tokens",
+	"quelle": "design/tokens.json",
+	"hinweis": "AUTO-GENERIERT durch scripts/generate-tokens.mjs — NICHT von Hand ändern.",
+	"zuordnung": {
+		"light": {
+			"--bg": "hell-weiss",
+			"--surface": "hell-weiss",
+			"--text": "schwarz",
+			"--text-muted": "hell-schwarz",
+			"--border": "weiss",
+			"--accent": "rot",
+			"--diff-add": "gruen",
+			"--diff-del": "rot"
+		},
+		"dark": {
+			"--bg": "schwarz",
+			"--surface": "schwarz",
+			"--text": "weiss",
+			"--text-muted": "hell-schwarz",
+			"--border": "schwarz",
+			"--accent": "hell-rot",
+			"--diff-add": "gruen",
+			"--diff-del": "hell-rot"
+		}
+	}
+}

@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Syntax Bot</title>
+	<link rel="stylesheet" href="style.css">
+</head>
+<body>
+	<header class="kopfzeile">
+		<h1 class="wortmarke">SYNTAX·BOT</h1>
+		<div class="statusbereich">
+			<span id="modus-anzeige" class="modus-anzeige" hidden>
+				<span id="modus-punkte" class="modus-punkte" aria-hidden="true"></span>
+				<span id="modus-name"></span>
+			</span>
+			<span id="modell-name" class="modell-name"></span>
+			<button id="schrift-knopf" type="button" class="knopf knopf--klein" aria-pressed="false"
+				title="OpenDyslexic als Schrift für den Fließtext">LRS-Schrift</button>
+			<button id="modell-knopf" type="button" class="knopf knopf--klein">Modell</button>
+			<span id="nutzer-name" class="nutzer-name" hidden></span>
+			<span id="verbindung" class="verbindung verbindung--getrennt">getrennt</span>
+		</div>
+	</header>
+
+	<main id="verlauf" class="verlauf" aria-live="polite">
+		<section class="willkommen">
+			<p>
+				Willkommen bei Syntax Bot. Wähle einen Modus und verweise auf den Code —
+				jede Änderung wird dir vorher als Vorschau gezeigt.
+			</p>
+			<ul class="modus-liste">
+				<li><code>/syntax-fix</code> — nur Rechtschreibung und Syntax</li>
+				<li><code>/code-fix</code> — Syntax, Struktur und Fehler</li>
+				<li><code>/cleanup</code> — nur Struktur und Formatierung</li>
+			</ul>
+		</section>
+	</main>
+
+	<footer class="eingabebereich">
+		<div id="arbeitsanzeige" class="arbeitsanzeige" hidden>
+			<span class="punktfolge" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span>
+			Syntax Bot arbeitet
+			<button id="abbrechen-knopf" type="button" class="knopf knopf--klein">Stopp</button>
+		</div>
+		<form id="eingabeformular" class="eingabeformular">
+			<label for="eingabe" class="visually-hidden">Nachricht an Syntax Bot</label>
+			<textarea id="eingabe" rows="3" autocomplete="off"
+				placeholder="Nachricht oder /modus eingeben …"></textarea>
+			<button id="sende-knopf" type="submit" class="knopf knopf--primaer">Senden</button>
+		</form>
+	</footer>
+
+	<!-- Dialog-Overlay: Diff-Vorschau, Auswahl- und Eingabedialoge -->
+	<div id="dialog-overlay" class="dialog-overlay" hidden>
+		<div class="dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-titel">
+			<h2 id="dialog-titel"></h2>
+			<div id="dialog-inhalt" class="dialog-inhalt"></div>
+			<div id="dialog-knoepfe" class="dialog-knoepfe"></div>
+		</div>
+	</div>
+
+	<!-- Einstellungsdialog: eigenes Modell verbinden (BYOM) -->
+	<div id="einstellungen-overlay" class="dialog-overlay" hidden>
+		<div class="dialog" role="dialog" aria-modal="true" aria-labelledby="einstellungen-titel">
+			<h2 id="einstellungen-titel">Eigenes Modell verbinden</h2>
+			<div class="dialog-inhalt">
+				<p class="einstellungen-hinweis">
+					OpenAI-kompatibler Endpunkt — z.&nbsp;B. Ollama, LM Studio oder llama.cpp.
+					Der Schlüssel bleibt ausschließlich im Arbeitsspeicher des Servers.
+				</p>
+				<div class="einstellungen-zeile">
+					<label for="byom-endpunkt">Endpunkt</label>
+					<input id="byom-endpunkt" type="url" autocomplete="off" placeholder="http://localhost:11434/v1">
+				</div>
+				<div class="einstellungen-zeile">
+					<label for="byom-schluessel">API-Key (optional)</label>
+					<input id="byom-schluessel" type="password" autocomplete="off" placeholder="leer lassen für lokale Endpunkte">
+				</div>
+				<div class="einstellungen-zeile">
+					<label for="byom-modell">Modell-ID</label>
+					<input id="byom-modell" type="text" autocomplete="off" placeholder="z. B. llama3.1:8b">
+				</div>
+				<select id="byom-modellliste" class="einstellungen-liste" size="5" hidden aria-label="Verfügbare Modelle"></select>
+			</div>
+			<div class="dialog-knoepfe">
+				<button id="byom-schliessen" type="button" class="knopf knopf--sekundaer">Schließen</button>
+				<button id="byom-testen" type="button" class="knopf knopf--sekundaer">Verbindung testen</button>
+				<button id="byom-speichern" type="button" class="knopf knopf--primaer">Speichern</button>
+			</div>
+		</div>
+	</div>
+
+	<script type="module" src="app.js"></script>
+</body>
+</html>

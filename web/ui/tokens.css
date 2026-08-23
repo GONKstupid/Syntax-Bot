@@ -1,0 +1,38 @@
+/*
+ * AUTO-GENERIERT durch scripts/generate-tokens.mjs — NICHT von Hand ändern.
+ * Quelle: design/tokens.json (Herkunft/Lizenzen: design/STYLE-SOURCE.md).
+ */
+
+:root {
+	--bg: #ffffff;
+	--surface: #f4f4f4;
+	--text: #111111;
+	--text-muted: #6b6b6b;
+	--border: #d9d9d9;
+	--accent: #d71921;
+	--diff-add: #1a7f37;
+	--diff-del: #b42318;
+
+	/* Abgeleitete Flächen: Diff-Zeilen tragen 12 % der Signalfarbe. */
+	--diff-add-flaeche: color-mix(in srgb, var(--diff-add) 12%, var(--bg));
+	--diff-del-flaeche: color-mix(in srgb, var(--diff-del) 12%, var(--bg));
+	/* Punktraster-Textur: so ruhig, dass sie beim Lesen nicht stört. */
+	--punkt: color-mix(in srgb, var(--text) 8%, transparent);
+
+	/* Schrift-Skalierung (Spec: 0,875–1,5). */
+	--font-scale: 1;
+	--fokus: 2px solid var(--accent);
+}
+
+@media (prefers-color-scheme: dark) {
+	:root {
+		--bg: #0a0a0a;
+		--surface: #141414;
+		--text: #ededed;
+		--text-muted: #8a8a8a;
+		--border: #2b2b2b;
+		--accent: #ff3b30;
+		--diff-add: #3fb950;
+		--diff-del: #f85149;
+	}
+}

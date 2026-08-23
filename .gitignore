@@ -1,0 +1,6 @@
+# Wird von test/link-deps.mjs erzeugt: Verweise auf die isolierte Pi-Instanz.
+node_modules/
+
+# Betriebssystem-Krempel
+.DS_Store
+Thumbs.db

@@ -1,0 +1,38 @@
+{
+  "name": "syntax-bot",
+  "version": "0.2.0",
+  "description": "Coding-Agent auf Pi-Basis, der Rechtschreib- und Syntaxfehler korrigiert, ohne die Programmlogik anzufassen. Hilfsmittel bei Lese-Rechtschreib-Schwäche (LRS).",
+  "keywords": [
+    "pi-package",
+    "syntax",
+    "lrs",
+    "accessibility",
+    "coding-agent"
+  ],
+  "type": "module",
+  "private": true,
+  "pi": {
+    "extensions": [
+      "extensions/core",
+      "extensions/syntax-fix",
+      "extensions/code-fix",
+      "extensions/cleanup"
+    ]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-coding-agent": "*",
+    "typebox": "*",
+    "ws": "*"
+  },
+  "scripts": {
+    "start": "bash scripts/syntax-bot.sh",
+    "web": "node web/server/index.ts",
+    "ide": "node ide/index.ts",
+    "update-pi": "bash scripts/update-pi.sh",
+    "update-style": "bash scripts/update-coding-style.sh",
+    "tokens": "node scripts/generate-tokens.mjs",
+    "pretest": "node test/link-deps.mjs",
+    "test": "node --test \"test/*.test.ts\""
+  }
+}
