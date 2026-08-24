@@ -30,6 +30,8 @@ function fakePi() {
 	const empfangeneEreignisse: Array<(ereignis: Record<string, unknown>) => void> = [];
 	const fake = {
 		prompts: [] as string[],
+		abonnenten: empfangeneEreignisse,
+		model: { id: "test-modell" },
 		sessionManager: {
 			newSession() {
 				return "neue-id";
@@ -203,6 +205,49 @@ describe("AcpAdapter", () => {
 
 		assert.equal(ergebnis.stopReason, "end_turn");
 		assert.deepEqual(fake.prompts, ["Korrigiere bitte @src/app.ts"]);
+	});
+
+	it("agent_message_chunk überträgt nur Deltas, nicht den kumulierten Text", async () => {
+		const fake = fakePi();
+		fake.prompt = async () => {
+			for (const fn of fake.abonnenten) {
+				fn({ type: "message_start", message: { role: "assistant", content: [] } });
+				fn({
+					type: "message_update",
+					message: { role: "assistant", content: [{ type: "text", text: "Siehe [Doku](https://x.y)" }] },
+				});
+				fn({
+					type: "message_end",
+					message: { role: "assistant", content: [{ type: "text", text: "Siehe [Doku](https://x.y) — fertig." }] },
+				});
+			}
+		};
+		const updates: Array<{ update: { sessionUpdate?: string; content?: { text?: string } } }> = [];
+		const adapter = new AcpAdapter({ agentDir: "/nirgendwo", sessionErzeugen: async () => fake as never });
+		const verbindung = new AcpVerbindung(
+			(zeile) => fangeAuf(zeile, updates),
+			(anfrage) => adapter.anfrage(verbindung, anfrage),
+			() => {},
+		);
+
+		const session = (await adapter.anfrage(verbindung, {
+			jsonrpc: "2.0",
+			id: 20,
+			method: "session/new",
+			params: {},
+		})) as { sessionId: string };
+		await adapter.anfrage(verbindung, {
+			jsonrpc: "2.0",
+			id: 21,
+			method: "session/prompt",
+			params: { sessionId: session.sessionId, prompt: [{ type: "text", text: "hallo" }] },
+		});
+
+		const chunks = updates
+			.filter((u) => u.update.sessionUpdate === "agent_message_chunk")
+			.map((u) => u.update.content?.text)
+			.filter((text) => text !== "Es ist noch kein Modell eingerichtet. Tippe /login — API-Key oder eigener Endpunkt, alles direkt hier im Chat.\n");
+		assert.deepEqual(chunks, ["Siehe [Doku](https://x.y)", " — fertig."]);
 	});
 
 	it("ein Prompt-Fehler wird als Klartext gemeldet, nicht als „refusal“", async () => {

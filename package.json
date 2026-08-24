@@ -29,10 +29,15 @@
     "start": "bash scripts/syntax-bot.sh",
     "web": "node web/server/index.ts",
     "ide": "node ide/index.ts",
+    "build:vscode": "node vscode/esbuild.mjs",
     "update-pi": "bash scripts/update-pi.sh",
     "update-style": "bash scripts/update-coding-style.sh",
     "tokens": "node scripts/generate-tokens.mjs",
     "pretest": "node test/link-deps.mjs",
     "test": "node --test \"test/*.test.ts\""
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2",
+    "jsdom": "^30.0.1"
   }
 }

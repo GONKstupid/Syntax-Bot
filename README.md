@@ -139,6 +139,58 @@ Dialog direkt im Chat (API-Key, Anmeldung im Browser für Claude Pro/Max
 Chat ändern), `/modus`, `/modus-aus` und `/help`. Jede Datei-Änderung
 erscheint vor dem Schreiben als Bestätigungsdialog.
 
+## Syntax Bot in VS Code (eigenständige Extension)
+
+Für Rechner, auf denen zwar VS-Code-Extensions installiert werden dürfen,
+aber keine weiteren Programme (kein Node, kein CLI-Agent): Die Extension
+bringt **alles mit** — die Pi-Laufzeit läuft gebündelt im Extension-Host,
+die Konfiguration liegt im von VS Code verwalteten Speicher. Modell kommt
+per `/login` dazu (API-Key, Browser-Anmeldung oder eigener Endpunkt).
+
+Extension bauen und als VSIX installieren:
+
+```bash
+npm run build:vscode                       # vscode/dist/ erzeugen
+cd vscode
+npx @vscode/vsce package                   # syntax-bot-<version>.vsix
+code --install-extension syntax-bot-*.vsix # oder per UI: „Aus VSIX installieren“
+```
+
+Danach das Syntax-Bot-Symbol in der Aktivitätsleiste öffnen. Die drei Modi
+sitzen als Dot-Leiste in der Kopfzeile, Diff-Rückfragen erscheinen als
+Übernehmen/Verwerfen-Karte direkt über der Eingabe.
+
+## Syntax Bot in VS Code (über ACP)
+
+VS Code hat kein natives ACP — über die Community-Extension
+[**ACP Client**](https://marketplace.visualstudio.com/items?itemName=formulahendry.acp-client)
+(`formulahendry.acp-client`, MIT) spricht VS Code aber dasselbe Protokoll wie
+Zed. Der Adapter bleibt derselbe (`ide/index.ts`), es kommt nur Konfiguration
+dazu:
+
+1. Extension „ACP Client" aus dem Marketplace installieren (Node.js 18+
+   muss im `PATH` sein).
+2. Einmalig die isolierte Instanz einrichten (`scripts/syntax-bot.ps1`).
+3. In der VS Code `settings.json` ergänzen:
+
+```json
+{
+  "acp.agents": {
+    "Syntax Bot": {
+      "command": "node",
+      "args": ["C:\\Pfad\\zu\\Syntax-Bot\\ide\\index.ts"]
+    }
+  }
+}
+```
+
+4. ACP-Symbol in der Aktivitätsleiste öffnen, „Syntax Bot" anklicken,
+   chatten. Die drei Modi erscheinen als Slash-Commands bzw.
+   Modus-Auswahl; Diff-Rückfragen kommen als Berechtigungsdialog.
+
+Falls sich etwas anders als in Zed verhält, liefert der Befehl
+„ACP: Show Protocol Traffic" den JSON-RPC-Verkehr zum Vergleich.
+
 ## Entwicklung
 
 ```
@@ -167,7 +219,8 @@ Formatter ausführen kann.
 ## Bekannte Lücken
 
 Phase 1 und Phase 2 der Roadmap sind weitgehend umgesetzt: Web-Agent (mit
-OAuth/BYOM) läuft, die IDE-Anbindung ist für Zed über ACP umgesetzt. Offen sind
-die Vertiefung der IDE-Anbindung (Kontext wie offene Datei/Selektion),
-VS Code sowie eine formale Prüfung der Logik-Unveränderlichkeit im
+OAuth/BYOM) läuft, die IDE-Anbindung ist für Zed nativ und für VS Code über
+die Community-Extension „ACP Client" umgesetzt. Offen sind
+die Vertiefung der IDE-Anbindung (Kontext wie offene Datei/Selektion)
+sowie eine formale Prüfung der Logik-Unveränderlichkeit im
 Cleanup-Modus — Details in `HANDOFF.md`.

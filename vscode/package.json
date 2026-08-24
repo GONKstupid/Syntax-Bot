@@ -1,0 +1,53 @@
+{
+	"name": "syntax-bot",
+	"displayName": "Syntax Bot",
+	"description": "Coding-Agent auf Pi-Basis für LRS: korrigiert Rechtschreibung und Syntax, ohne die Logik anzufassen. Komplett eingebettet — keine weiteren Installationen nötig (BYOM: eigenes Modell mitbringen).",
+	"version": "0.3.0",
+	"publisher": "syntax-bot",
+	"license": "SEE LICENSE",
+	"private": true,
+	"engines": {
+		"vscode": "^1.85.0"
+	},
+	"categories": [
+		"AI",
+		"Chat",
+		"Education"
+	],
+	"activationEvents": ["onView:syntaxBot.chat"],
+	"main": "./dist/extension.js",
+	"contributes": {
+		"viewsContainers": {
+			"activitybar": [
+				{
+					"id": "syntax-bot",
+					"title": "Syntax Bot",
+					"icon": "media/symbol.svg"
+				}
+			]
+		},
+		"views": {
+			"syntax-bot": [
+				{
+					"type": "webview",
+					"id": "syntaxBot.chat",
+					"name": "Chat"
+				}
+			]
+		},
+		"commands": [
+			{
+				"command": "syntaxBot.open",
+				"title": "Syntax Bot: Chat öffnen"
+			},
+			{
+				"command": "syntaxBot.newSession",
+				"title": "Syntax Bot: Neue Session"
+			}
+		]
+	},
+	"scripts": {
+		"compile": "node esbuild.mjs",
+		"watch": "node esbuild.mjs --watch"
+	}
+}

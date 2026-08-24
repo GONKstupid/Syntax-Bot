@@ -24,7 +24,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import type { AcpVerbindung, RpcNotification, RpcRequest } from "./acp.ts";
 import { IdeUiBridge } from "./ui-bridge.ts";
-import { applyByomToSession, validateByomConfig } from "../web/server/byom.ts";
+import { applyByomToSession, fetchRemoteModels, validateByomConfig } from "../web/server/byom.ts";
 
 /** Die Modi als ACP-Modi — Reihenfolge wie in der Spec-Tabelle. */
 export const MODI = [
@@ -227,6 +227,23 @@ export class AcpAdapter {
 				if (!gehostet) throw new Error("Unbekannte Session.");
 				return await gehostet.prompt(params.prompt);
 			}
+			case "session/status": {
+				const gehostet = this.sessions.get(String(params.sessionId));
+				if (!gehostet) throw new Error("Unbekannte Session.");
+				return await gehostet.status();
+			}
+			case "session/set_model": {
+				const gehostet = this.sessions.get(String(params.sessionId));
+				if (!gehostet) throw new Error("Unbekannte Session.");
+				await gehostet.modellSetzen(String(params.modelId ?? ""));
+				return {};
+			}
+			case "session/set_thinking": {
+				const gehostet = this.sessions.get(String(params.sessionId));
+				if (!gehostet) throw new Error("Unbekannte Session.");
+				gehostet.thinkingSetzen(String(params.level ?? ""));
+				return {};
+			}
 			default:
 				throw new Error(`Methode nicht unterstützt: ${anfrage.method}`);
 		}
@@ -276,6 +293,14 @@ export class IdeAcpSession {
 	private frageOffen?: (antwort: string) => void;
 	/** Bereits beantwortete Chat-Fragen — Provider-Nachfragen bedienen sich daraus. */
 	private antwortPuffer: string[] = [];
+	/** Länge des Assistententextes, der bereits als Chunk gesendet wurde. */
+	private gesendet = 0;
+	/** Länge des Denk-Protokolls, das bereits als Chunk gesendet wurde. */
+	private denkGesendet = 0;
+	/** Zuletzt bekannt gegebener Modus (für current_mode_update). */
+	private aktuellerModusId = "default";
+	/** Ob der laufende Zug mindestens eine Antwortzeile gebracht hat. */
+	private hatGeantwortet = false;
 
 	constructor(
 		id: string,
@@ -326,6 +351,7 @@ export class IdeAcpSession {
 	async setMode(modeId: string): Promise<void> {
 		const modus = MODI.find((kandidat) => kandidat.id === modeId);
 		if (!modus) throw new Error(`Unbekannter Modus: ${modeId}`);
+		this.aktuellerModusId = modeId;
 		// Die Extensions sind Commands — der Weg über den Command-Text hält
 		// alles in einem Pfad (TUI, Web und IDE verhalten sich identisch).
 		const ziel = modeId === "default" ? "/modus-aus" : `/${modeId}`;
@@ -336,28 +362,79 @@ export class IdeAcpSession {
 		});
 	}
 
+	/**
+	 * Nach einem Modus-Command per Slash-Text die Clients auf den neuen Stand
+	 * bringen — sonst zeigt z. B. die VS-Code-Fußleiste den alten Modus.
+	 */
+	private modusNachmelden(name: string, vorher?: string): void {
+		const ziels: Record<string, string> = {
+			"syntax-fix": "syntax-fix",
+			"code-fix": "code-fix",
+			cleanup: "cleanup",
+			"modus-aus": "default",
+		};
+		const id = ziels[name];
+		if (!id || id === vorher) return;
+		this.aktuellerModusId = id;
+		this.sendeUpdate({
+			sessionUpdate: "current_mode_update",
+			currentModeId: id,
+		});
+	}
+
+	/** Benachrichtigt angemeldete Clients, dass sich Provider/Modell geändert haben. */
+	private aktualisieren(): void {
+		this.verbindung.benachrichtigen("syntax-bot/refresh", { sessionId: this.id });
+	}
+
+
 	async prompt(inhalt: unknown): Promise<{ stopReason: string }> {
 		const bloecke = Array.isArray(inhalt) ? inhalt : [];
 		const teile = bloecke.map(blockZuText).filter((teil): teil is string => teil.length > 0);
 		const text = teile.join("\n").trim();
-		if (!text) return { stopReason: "end_turn" };
-
+		// Bewusst KEIN early-return bei leerem Text: Eine leere Eingabe ist die
+		// gültige Antwort auf Chat-Rückfragen („Key nicht nötig — Enter").
 		// Läuft gerade eine Chat-Rückfrage (z. B. API-Key eingeben)? Dann ist
-		// diese Nachricht die Antwort — egal ob mit oder ohne „/“.
+		// diese Nachricht die Antwort — auch eine LEERE (manche Provider
+		// brauchen keinen Key). Aber NUR Klartext: Slash-Commands brechen die
+		// offene Rückfrage kontrolliert ab und werden ausgeführt (sonst würde
+		// /settings vom hängenden Login-Dialog verschluckt).
 		if (this.frageOffen) {
 			const auflösen = this.frageOffen;
 			this.frageOffen = undefined;
-			this.antwortPuffer.push(text);
-			auflösen(text);
-			return { stopReason: "end_turn" };
+			if (!text.startsWith("/")) {
+				this.antwortPuffer.push(text);
+				auflösen(text);
+				return { stopReason: "end_turn" };
+			}
+			auflösen("");
+			this.nachricht("*(Offene Eingabe abgebrochen.)*");
 		}
+		if (!text || text === "-") return { stopReason: "end_turn" };
+		// „-" ist die Bestätigung für „leer" bei Chat-Rückfragen (z. B. kein
+		// API-Key nötig) — ohne offene Frage ist es ein No-op.
 
 		if (text.startsWith("/")) {
 			return await this.command(text);
 		}
 
 		try {
+			// Ohne Modell gar erst versuchen — die rohe Provider-Fehlermeldung
+			// hilft nicht weiter; der /login-Hinweis schon.
+			const pi = this.pi as unknown as { model?: unknown };
+			if (!pi.model) {
+				this.nachricht(
+					"Es ist noch kein Modell eingerichtet. Tippe **/login** — API-Key, Browser-Anmeldung oder eigener Endpunkt (Ollama & Co.), geführt im Chat.",
+				);
+				return { stopReason: "end_turn" };
+			}
+			this.hatGeantwortet = false;
 			await this.pi.prompt(text);
+			if (!this.hatGeantwortet) {
+				this.nachricht(
+					"*(Der Modellaufruf lief ohne sichtbare Antwort durch — bitte Provider/Modell prüfen oder erneut senden.)*",
+				);
+			}
 			return { stopReason: "end_turn" };
 		} catch (fehler) {
 			this.fehlermeldung(fehler);
@@ -367,14 +444,18 @@ export class IdeAcpSession {
 
 	/** Zentrale Command-Weiterleitung nach dem Katalog (KOMMANDOS). */
 	private async command(text: string): Promise<{ stopReason: string }> {
-		const [name, ...rest] = text.slice(1).split(/\s+/);
+		const [rohName, ...rest] = text.slice(1).split(/\s+/);
+		// Groß-/Kleinschreibung ignorieren — „/Login“ ist „/login“.
+		const name = rohName.toLowerCase();
 		const argument = rest.join(" ").trim();
 		const eintrag = KOMMANDOS.find((kandidat) => kandidat.name === name);
 
 		// Unbekannter Slash-Command → trotzdem an Pi (Extensions könnten ihn kennen).
 		if (!eintrag || eintrag.modus === "pi") {
 			try {
-				await this.pi.prompt(text);
+				const vorModus = this.aktuellerModusId;
+				await this.pi.prompt(`/${name}${argument ? ` ${argument}` : ""}`);
+				this.modusNachmelden(name, vorModus);
 				return { stopReason: "end_turn" };
 			} catch (fehler) {
 				this.fehlermeldung(fehler);
@@ -470,7 +551,9 @@ export class IdeAcpSession {
 					return;
 				}
 				await this.pi.modelRuntime.login(provider.id, "api_key", this.interaktion());
-				this.nachricht(`${provider.name} ist angemeldet. Mit /model prüfen und wechseln.`);
+				await this.modellDesProvidersAktivieren(provider.id);
+				this.nachricht(`${provider.name} ist angemeldet.`);
+				this.aktualisieren();
 				return;
 			}
 			if (art === "browser" || art === "oauth" || art === "2") {
@@ -481,7 +564,9 @@ export class IdeAcpSession {
 						"Fertiggestellt wird automatisch, sobald du im Browser bestätigt hast.",
 				);
 				await this.pi.modelRuntime.login(provider.id, "oauth", this.interaktion());
-				this.nachricht(`${provider.name} ist angemeldet. Mit /model prüfen und wechseln.`);
+				await this.modellDesProvidersAktivieren(provider.id);
+				this.nachricht(`${provider.name} ist angemeldet.`);
+				this.aktualisieren();
 				return;
 			}
 
@@ -581,13 +666,46 @@ export class IdeAcpSession {
 			this.nachricht("Abgebrochen.");
 			return;
 		}
-		const schluessel = (await this.frage("API-Key (falls nötig — sonst einfach Enter drücken):")).trim();
-		const modellId = (await this.frage("Modell-ID (z. B. llama3.1:8b):")).trim();
+		const schluessel = (await this.frage(
+			"API-Key (falls nötig — sonst nur `-` eingeben und mit Enter bestätigen):",
+		)).trim();
+		const keinKey = !schluessel || schluessel === "-";
+
+		// Modell wählen: wenn der Endpunkt eine Modellliste liefert (LM Studio,
+		// Ollama & Co. tun das), per Ziffer — sonst als Text tippen.
+		let modellId: string;
+		const katalog = await fetchRemoteModels(endpunkt, keinKey ? "" : schluessel).catch(() => [] as string[]);
+		if (katalog.length > 0) {
+			const liste = katalog.map((name, index) => `${index + 1} — ${name}`).join("\n");
+			const antwort = (
+				await this.frage(`Modelle am Endpunkt:\n${liste}\n\nAntworte mit Ziffer oder tippe eine Modell-ID:`)
+			).trim();
+			if (!antwort || antwort === "-") {
+				this.nachricht("Abgebrochen — ohne Modell-ID geht es nicht.");
+				return;
+			}
+			const zahl = Number.parseInt(antwort, 10);
+			modellId =
+				Number.isFinite(zahl) && zahl >= 1 && zahl <= katalog.length ? katalog[zahl - 1] : antwort;
+		} else {
+			modellId = (
+				await this.frage(
+					"Modell-ID (z. B. llama3.1:8b) — Hinweis: „/-Commands“ brechen diesen Dialog ab:",
+				)
+			).trim();
+		}
 		if (!modellId) {
 			this.nachricht("Abgebrochen — ohne Modell-ID geht es nicht.");
 			return;
 		}
-		const config = await validateByomConfig({ baseUrl: endpunkt, apiKey: schluessel, modelId: modellId });
+		// Pi listet Provider ohne Credentials gar nicht erst — lokale Endpunkte
+		// ohne Key bekommen deshalb einen Platzhalter (wird von LM Studio &
+		// Co. ignoriert).
+		const config = await validateByomConfig({
+			baseUrl: endpunkt,
+			apiKey: keinKey ? "kein-key" : schluessel,
+			modelId: modellId,
+		});
 		await applyByomToSession(this.pi, config);
 		this.nachricht(`Fertig! Verbunden mit **${config.modelId}** über ${config.displayName}.`);
 	}
@@ -967,13 +1085,49 @@ export class IdeAcpSession {
 	}
 
 	private async logoutKommando(provider: string): Promise<void> {
+		const laufwerke = this.pi as unknown as {
+			modelRuntime: {
+				getProviders(): readonly { id: string; name?: string }[];
+				getProviderAuthStatus(id: string): { configured: boolean };
+			};
+		};
+
+		// Ohne Angabe: angemeldete Provider auflisten und interaktiv wählen.
 		if (!provider) {
-			this.nachricht("Bitte Provider angeben, z. B. `/logout anthropic`.");
+			const angemeldet = laufwerke.modelRuntime
+				.getProviders()
+				.filter((p) => laufwerke.modelRuntime.getProviderAuthStatus(p.id)?.configured);
+			if (angemeldet.length === 0) {
+				this.nachricht("Es ist kein Provider angemeldet.");
+				return;
+			}
+			if (angemeldet.length === 1) {
+				await this.logoutKommando(angemeldet[0].id);
+				return;
+			}
+			const wahl = await this.auswahl(
+				"Welcher Provider soll abgemeldet werden?",
+				angemeldet.map((p) => [p.name ?? p.id, p.id] as [string, string]),
+			);
+			if (!wahl) {
+				this.nachricht("Abgebrochen.");
+				return;
+			}
+			await this.logoutKommando(wahl);
 			return;
 		}
 		try {
 			await this.pi.modelRuntime.logout(provider);
 			this.nachricht(`${provider} wurde abgemeldet.`);
+			// War das aktive Modell von diesem Provider? Dann ist es jetzt
+			// unbrauchbar — klar sagen statt auf einen 401 warten.
+			const pi = this.pi as unknown as { model?: { provider?: string } };
+			if (pi.model?.provider === provider) {
+				this.nachricht(
+					`Das aktive Modell gehört zu ${provider} und funktioniert ohne Anmeldung nicht mehr — bitte neu anmelden (/login) oder anderes Modell wählen.`,
+				);
+			}
+			this.aktualisieren();
 		} catch (fehler) {
 			this.nachricht(`Abmelden fehlgeschlagen: ${fehler instanceof Error ? fehler.message : String(fehler)}`);
 		}
@@ -991,24 +1145,122 @@ export class IdeAcpSession {
 	}
 
 	private fehlermeldung(fehler: unknown): void {
+		const text = fehler instanceof Error ? fehler.message : String(fehler);
 		this.sendeUpdate({
 			sessionUpdate: "agent_message_chunk",
 			content: {
 				type: "text",
-				text: `**Fehler:** ${fehler instanceof Error ? fehler.message : String(fehler)}\n`,
+				text: `**Fehler:** ${text}\n`,
 			},
 		});
+		// Der häufigste Fehler in frischen Sessions: kein Modell/Key vorhanden.
+		if (/api key|no model|not authenticated|auth/i.test(text)) {
+			this.nachricht(
+				"Es sieht so aus, als wäre kein Modell angemeldet. Tippe **/login** — API-Key, Browser-Anmeldung (Claude Pro/Max & Co.) oder eigener Endpunkt, geführt im Chat.",
+			);
+		}
 	}
 
 	abbrechen(): void {
 		void this.pi.abort().catch(() => {});
 	}
 
+	/**
+	 * Modelle, deren Provider tatsächlich angemeldet ist. Der Roh-Katalog
+	 * enthält auch Provider ohne gültige Credentials — wählt man deren
+	 * Modelle, gibt es erst beim Zug einen 401.
+	 */
+	private async verfuegbareModelle(): Promise<Array<{ id: string; provider?: string }>> {
+		const laufwerk = this.pi as unknown as {
+			modelRuntime: {
+				getAvailable(): Promise<readonly { id: string; provider?: string }[]>;
+				getProviders(): readonly { id: string }[];
+				getProviderAuthStatus?(id: string): { configured?: boolean };
+			};
+		};
+		const modelle = await laufwerk.modelRuntime.getAvailable().catch(() => []);
+		if (typeof laufwerk.modelRuntime.getProviders !== "function") return [...modelle];
+		const konfiguriert = new Set(
+			laufwerk.modelRuntime
+				.getProviders()
+				.filter((p) => laufwerk.modelRuntime.getProviderAuthStatus?.(p.id)?.configured ?? true)
+				.map((p) => p.id),
+		);
+		return modelle.filter((m) => !m.provider || konfiguriert.has(m.provider));
+	}
+
+	/** Nach einem Login: falls nötig auf das erste Modell des Providers wechseln. */
+	private async modellDesProvidersAktivieren(providerId: string): Promise<void> {
+		const pi = this.pi as unknown as { model?: { provider?: string } };
+		if (pi.model?.provider === providerId) return;
+		const modelle = await this.verfuegbareModelle();
+		const ziel = modelle.find((m) => m.provider === providerId);
+		if (!ziel) {
+			this.nachricht(`Für ${providerId} sind keine Modelle im Katalog — Modell bitte manuell wählen.`);
+			return;
+		}
+		await this.pi.setModel(ziel as never);
+		this.nachricht(`Aktives Modell: ${ziel.id} (${providerId}).`);
+		this.aktualisieren();
+	}
+
+	/**
+	 * Status für Editor-Fußleisten (VS Code): aktives Modell, Thinking-Stufe,
+	 * Kontext-Füllstand. Bewusst eine eigene Methode statt ACP-Standard —
+	 * Clients, die sie nicht kennen, verlieren nichts.
+	 */
+	async status(): Promise<Record<string, unknown>> {
+		const modelle = await this.verfuegbareModelle().catch(() => []);
+		const pi = this.pi as unknown as {
+			model?: { id?: string };
+			getThinkingLevel?: () => string;
+			getAvailableThinkingLevels?: () => string[];
+			getContextUsage?: () => { tokens: number | null; contextWindow?: number; percent?: number } | null;
+		};
+		const kontext = pi.getContextUsage?.() ?? null;
+		return {
+			modell: pi.model?.id ?? null,
+			modelle: modelle.map((m) => m.id),
+			thinking: typeof pi.getThinkingLevel === "function" ? pi.getThinkingLevel() : null,
+			thinkingStufen: typeof pi.getAvailableThinkingLevels === "function" ? pi.getAvailableThinkingLevels() : [],
+			kontext:
+				kontext && kontext.tokens !== null
+					? { tokens: kontext.tokens, fenster: kontext.contextWindow ?? null, prozent: Math.round(kontext.percent ?? 0) }
+					: null,
+		};
+	}
+
+	/** Modell wechseln (Fußleiste / session/set_model). */
+	async modellSetzen(id: string): Promise<void> {
+		const modelle = await this.verfuegbareModelle();
+		const ziel = modelle.find((kandidat) => kandidat.id === id || `${kandidat.provider}:${kandidat.id}` === id);
+		if (!ziel) {
+			throw new Error(
+				`Modell „${id}“ ist nicht verfügbar (nur angemeldete Provider werden angeboten — ggf. /login).`,
+			);
+		}
+		await this.pi.setModel(ziel as never);
+		this.nachricht(`Modell gewechselt: ${ziel.id}`);
+		this.aktualisieren();
+	}
+
+	/** Thinking-Stufe setzen (Fußleiste / session/set_thinking). */
+	thinkingSetzen(level: string): void {
+		const pi = this.pi as unknown as { setThinkingLevel?: (level: string) => void };
+		if (typeof pi.setThinkingLevel !== "function") {
+			this.nachricht("Thinking-Stufen kennt dieses Modell nicht.");
+			return;
+		}
+		pi.setThinkingLevel(level);
+		this.nachricht(`Thinking-Stufe: ${level}`);
+		this.aktualisieren();
+	}
+
 	/** /model — ohne Argument Liste, mit Argument Wechsel. */
 	private async modellKommando(argument: string): Promise<void> {
 		try {
 			if (!argument) {
-				const modelle = await this.pi.modelRuntime.getAvailable();
+				const modelle = await this.verfuegbareModelle();
 				if (modelle.length === 0) {
 					this.nachricht("Es sind keine Modelle verfügbar — bitte zuerst `/login api <provider>` oder `/login custom` ausführen.");
 					return;
@@ -1017,17 +1269,20 @@ export class IdeAcpSession {
 					const aktuell = this.pi.model?.id === modell.id ? "  ← aktiv" : "";
 					return `- ${modell.id}${aktuell}`;
 				});
-				this.nachricht(`Verfügbare Modelle:\n${zeilen.join("\n")}\n\nWechseln mit /model <modell-id>`);
+				this.nachricht(`Verfügbare Modelle (angemeldete Provider):\n${zeilen.join("\n")}\n\nWechseln mit /model <modell-id>`);
 				return;
 			}
-			const modelle = await this.pi.modelRuntime.getAvailable();
+			const modelle = await this.verfuegbareModelle();
 			const ziel = modelle.find((kandidat) => kandidat.id === argument || `${kandidat.provider}:${kandidat.id}` === argument);
 			if (!ziel) {
-				this.nachricht(`Modell „${argument}“ ist nicht verfügbar. /model ohne Argument zeigt die Liste.`);
+				this.nachricht(
+					`Modell „${argument}“ ist nicht verfügbar (nur angemeldete Provider). /model ohne Argument zeigt die Liste.`,
+				);
 				return;
 			}
-			await this.pi.setModel(ziel);
+			await this.pi.setModel(ziel as never);
 			this.nachricht(`Modell gewechselt: ${ziel.id}`);
+		this.aktualisieren();
 		} catch (fehler) {
 			this.nachricht(`Fehler beim Modell-Wechsel: ${fehler instanceof Error ? fehler.message : String(fehler)}`);
 		}
@@ -1038,12 +1293,62 @@ export class IdeAcpSession {
 			case "message_start":
 			case "message_update":
 			case "message_end": {
-				if ((ereignis.message as { role?: string })?.role !== "assistant") return;
+				const message = ereignis.message as {
+					role?: string;
+					stopReason?: string;
+					errorMessage?: string;
+					provider?: string;
+					model?: string;
+					content?: Array<{ type?: string; text?: string }>;
+				};
+				if (message?.role !== "assistant") return;
+
+				// Provider-/Modellfehler kommen als Message mit stopReason "error"
+				// und ohne Wurf — ohne diese Behandlung bliebe der Zug stumm.
+				if (message.stopReason === "error") {
+					if (ereignis.type === "message_end") {
+						this.hatGeantwortet = true;
+						const kontext = [message.provider, message.model].filter(Boolean).join("/");
+						this.fehlermeldung(
+							new Error(
+								kontext
+									? `${kontext}: ${message.errorMessage ?? "Unbekannter Modellfehler."}`
+									: message.errorMessage ?? "Unbekannter Modellfehler.",
+							),
+						);
+					}
+					return;
+				}
+
+				// Denk-Protokoll als eigener Kanal (ACP: agent_thought_chunk).
+				const denken = (message.content ?? [])
+					.filter((block) => block?.type === "thinking")
+					.map((block) => block.text ?? "")
+					.join("");
+				if (denken) {
+					if (ereignis.type === "message_start") this.denkGesendet = 0;
+					const denkNeu = denken.length > this.denkGesendet ? denken.slice(this.denkGesendet) : "";
+					this.denkGesendet = denken.length;
+					if (denkNeu) {
+						this.sendeUpdate({
+							sessionUpdate: "agent_thought_chunk",
+							content: { type: "text", text: denkNeu },
+						});
+					}
+				}
+
 				const text = extractText(ereignis.message);
-				if (!text && ereignis.type === "message_end") return;
+				// agent_message_chunk ist ein Delta — nur den Zuwachs seit der
+				// letzten Meldung schicken (sonst verdoppeln Clients den Text und
+				// das Markdown-Endrendering geht daneben).
+				if (ereignis.type === "message_start") this.gesendet = 0;
+				const neu = text.length > this.gesendet ? text.slice(this.gesendet) : "";
+				this.gesendet = text.length;
+				if (!neu) return;
+				this.hatGeantwortet = true;
 				this.sendeUpdate({
 					sessionUpdate: "agent_message_chunk",
-					content: { type: "text", text },
+					content: { type: "text", text: neu },
 				});
 				break;
 			}

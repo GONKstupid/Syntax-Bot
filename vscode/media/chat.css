@@ -1,0 +1,275 @@
+/* Syntax Bot — Chat-Webview. Tokens aus design/tokens.json (Nothing-inspiriert,
+   monochrom mit rotem Akzent). Dark/Light folgt dem Editor-Theme. */
+
+:root {
+	--bg: var(--vscode-editor-background, #0a0a0a);
+	--surface: var(--vscode-sideBar-background, #141414);
+	--text: var(--vscode-editor-foreground, #ededed);
+	--muted: var(--vscode-descriptionForeground, #8a8a8a);
+	--border: var(--vscode-panel-border, #2b2b2b);
+	--accent: #ff3b30;
+}
+
+@font-face {
+	font-family: "Doto";
+	src: url("./fonts/doto-var.woff2") format("woff2");
+	font-weight: 100 900;
+	font-display: swap;
+}
+@font-face {
+	font-family: "JetBrains Mono";
+	src: url("./fonts/JetBrainsMono-Regular.woff2") format("woff2");
+	font-weight: 400;
+	font-display: swap;
+}
+@font-face {
+	font-family: "JetBrains Mono";
+	src: url("./fonts/JetBrainsMono-Bold.woff2") format("woff2");
+	font-weight: 700;
+	font-display: swap;
+}
+
+* { box-sizing: border-box; }
+
+body {
+	margin: 0;
+	height: 100vh;
+	display: flex;
+	flex-direction: column;
+	background:
+		radial-gradient(circle at 1px 1px, var(--border) 1px, transparent 0) 0 0 / 16px 16px,
+		var(--bg);
+	color: var(--text);
+	font-family: "JetBrains Mono", "Cascadia Mono", Consolas, monospace;
+	font-size: 13px;
+	line-height: 1.55;
+}
+
+.kopf {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	padding: 8px 12px;
+	border-bottom: 1px solid var(--border);
+	flex: none;
+}
+
+.marke {
+	font-family: "Doto", "JetBrains Mono", monospace;
+	font-weight: 800;
+	letter-spacing: 0.14em;
+	font-size: 15px;
+	text-transform: uppercase;
+	user-select: none;
+}
+
+.kopfAktionen { display: flex; gap: 4px; }
+
+.kopfKnopf {
+	background: none;
+	border: 1px solid transparent;
+	color: var(--muted);
+	width: 26px;
+	height: 24px;
+	cursor: pointer;
+	border-radius: 3px;
+	font-size: 13px;
+	line-height: 1;
+}
+.kopfKnopf:hover { color: var(--text); border-color: var(--border); }
+.kopfKnopf:focus-visible { outline: 2px solid var(--accent); }
+
+.verlauf {
+	flex: 1;
+	overflow-y: auto;
+	padding: 12px;
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
+.nachricht { max-width: 100%; word-wrap: break-word; }
+.nachricht .rolle {
+	font-size: 10px;
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	color: var(--muted);
+	margin-bottom: 2px;
+	user-select: none;
+}
+.nachricht.nutzer .rolle { color: var(--text); opacity: 0.6; }
+.nachricht.denken { opacity: 0.65; }
+.nachricht.denken .rolle { color: var(--muted); }
+.nachricht.denken .md { font-style: italic; white-space: pre-wrap; }
+
+.md p { margin: 0.35em 0; }
+.md pre {
+	background: var(--surface);
+	border: 1px solid var(--border);
+	padding: 8px 10px;
+	overflow-x: auto;
+	margin: 0.5em 0;
+}
+.md code { font-family: inherit; }
+.md :not(pre) > code { background: var(--surface); padding: 0 4px; border-radius: 3px; }
+.md a { color: var(--accent); }
+.md h1, .md h2, .md h3 { font-size: inherit; text-decoration: underline; margin: 0.5em 0 0.25em; }
+
+.werkzeug {
+	font-size: 11px;
+	color: var(--muted);
+	border-left: 2px solid var(--border);
+	padding: 1px 0 1px 8px;
+	margin: 2px 0;
+}
+.werkzeug.laufend { border-left-color: var(--accent); }
+
+.berechtigung {
+	flex: none;
+	margin: 0 12px 6px;
+	border: 1px solid var(--accent);
+	background: var(--surface);
+	padding: 10px 12px;
+}
+.berechtigung .frage { white-space: pre-wrap; margin-bottom: 8px; }
+.berechtigungenAktionen { display: flex; gap: 8px; justify-content: flex-end; }
+
+button.aktion {
+	font-family: inherit;
+	font-size: 12px;
+	padding: 5px 14px;
+	cursor: pointer;
+	border-radius: 3px;
+}
+button.aktion:focus-visible { outline: 2px solid var(--accent); }
+button.aktion.nein {
+	background: none;
+	border: 1px solid var(--border);
+	color: var(--text);
+}
+button.aktion.ja {
+	background: var(--accent);
+	border: 1px solid var(--accent);
+	color: #ffffff;
+	font-weight: 700;
+}
+
+.fehler {
+	border-left: 3px solid var(--accent);
+	padding: 2px 0 2px 8px;
+	color: var(--text);
+}
+
+.fussLeiste {
+	flex: none;
+	border-top: 1px solid var(--border);
+	padding: 6px 10px 8px;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+#eingabe {
+	width: 100%;
+	resize: none;
+	background: var(--surface);
+	border: 1px solid var(--border);
+	color: var(--text);
+	font-family: inherit;
+	font-size: 13px;
+	padding: 8px 10px;
+	border-radius: 3px;
+}
+#eingabe:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
+
+.fussWerkzeug {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.fussKnopf {
+	background: none;
+	border: 1px solid var(--border);
+	color: var(--text);
+	min-width: 28px;
+	height: 26px;
+	padding: 0 8px;
+	cursor: pointer;
+	border-radius: 3px;
+	font-family: inherit;
+	font-size: 11px;
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	flex: none;
+}
+.fussKnopf:hover { border-color: var(--accent); color: var(--accent); }
+.fussKnopf:focus-visible { outline: 2px solid var(--accent); }
+.fussKnopf.aktiv { border-color: var(--accent); color: var(--accent); }
+.fussKnopf .etikett {
+	max-width: 160px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.fussKnopf.senden { font-size: 13px; }
+
+.fussInfo {
+	font-size: 11px;
+	color: var(--muted);
+	flex: none;
+}
+
+.fussAbstand { flex: 1; }
+
+.menue {
+	position: fixed;
+	z-index: 20;
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: 3px;
+	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+	max-height: 260px;
+	overflow-y: auto;
+	min-width: 180px;
+	max-width: 320px;
+	padding: 3px;
+}
+
+.menueEintrag {
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+	width: 100%;
+	background: none;
+	border: none;
+	color: var(--text);
+	font-family: inherit;
+	font-size: 12px;
+	padding: 5px 8px;
+	cursor: pointer;
+	text-align: left;
+	border-radius: 2px;
+}
+.menueEintrag:hover { background: var(--bg); }
+.menueEintrag:focus-visible { outline: 2px solid var(--accent); }
+.menueEintrag.aktiv { color: var(--accent); }
+.menueBeschreibung {
+	color: var(--muted);
+	font-size: 10px;
+	margin-left: auto;
+	text-align: right;
+}
+.menueLeer { padding: 6px 8px; color: var(--muted); font-size: 11px; }
+
+.slashPopup {
+	left: 10px;
+	max-height: 220px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	.nachricht, .berechtigung { animation: erscheinen 120ms ease-out; }
+	@keyframes erscheinen { from { opacity: 0; } to { opacity: 1; } }
+}

@@ -1,6 +1,10 @@
 # Wird von test/link-deps.mjs erzeugt: Verweise auf die isolierte Pi-Instanz.
 node_modules/
 
+# VS-Code-Extension: Build-Artefakte und Pakete werden nicht eingecheckt.
+vscode/dist/
+vscode/*.vsix
+
 # Betriebssystem-Krempel
 .DS_Store
 Thumbs.db
