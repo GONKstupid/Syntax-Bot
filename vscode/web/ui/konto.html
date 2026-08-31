@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Syntax Bot — Konto</title>
+	<link rel="stylesheet" href="style.css">
+</head>
+<body class="konto-seite">
+	<header class="kopfzeile">
+		<h1 class="wortmarke">SYNTAX·BOT</h1>
+		<div class="statusbereich">
+			<span id="nutzer-name" class="nutzer-name" hidden></span>
+			<span id="verbindung" class="verbindung verbindung--getrennt">getrennt</span>
+			<a class="knopf knopf--klein" href="/app">Zum Chat</a>
+		</div>
+	</header>
+
+	<main class="konto">
+		<h2 class="konto-titel">Konto und Modell-Anbieter</h2>
+		<p class="konto-hinweis">
+			Deine Anmeldung und deine Modell-Anbieter sind unabhängig voneinander:
+			Du kannst Provider anlegen, wechseln und löschen, wie du willst —
+			auch ganz ohne Anmeldung. Die Einstellungen bleiben auf diesem Server
+			gespeichert und überleben einen Neustart.
+		</p>
+
+		<section class="konto-abschnitt" aria-labelledby="provider-formular-titel">
+			<h3 id="provider-formular-titel">Neuen Anbieter verbinden</h3>
+			<p class="einstellungen-hinweis">
+				OpenAI-kompatibler Endpunkt — z.&nbsp;B. Ollama, LM Studio oder llama.cpp.
+			</p>
+			<div class="einstellungen-zeile">
+				<label for="byom-endpunkt">Endpunkt</label>
+				<input id="byom-endpunkt" type="url" autocomplete="off" placeholder="http://localhost:11434/v1">
+			</div>
+			<div class="einstellungen-zeile">
+				<label for="byom-schluessel">API-Key (optional)</label>
+				<input id="byom-schluessel" type="password" autocomplete="off" placeholder="leer lassen für lokale Endpunkte">
+			</div>
+			<div class="einstellungen-zeile">
+				<label for="byom-modell">Modell-ID</label>
+				<input id="byom-modell" type="text" autocomplete="off" placeholder="z. B. llama3.1:8b">
+			</div>
+			<select id="byom-modellliste" class="einstellungen-liste" size="5" hidden aria-label="Verfügbare Modelle"></select>
+			<div class="konto-knoepfe">
+				<button id="byom-testen" type="button" class="knopf knopf--sekundaer">Verbindung testen</button>
+				<button id="byom-speichern" type="button" class="knopf knopf--primaer">Speichern und verbinden</button>
+			</div>
+		</section>
+
+		<section class="konto-abschnitt" aria-labelledby="provider-liste-titel">
+			<h3 id="provider-liste-titel">Gespeicherte Anbieter</h3>
+			<ul id="provider-liste" class="provider-liste">
+				<li class="provider-leer">Noch keine Anbieter gespeichert.</li>
+			</ul>
+		</section>
+
+		<section id="meldungen" class="konto-abschnitt konto-meldungen" aria-live="polite"></section>
+	</main>
+
+	<script type="module" src="konto.js"></script>
+</body>
+</html>

@@ -45,13 +45,6 @@
 	font-display: swap;
 }
 
-@font-face {
-	font-family: "OpenDyslexic";
-	src: local("OpenDyslexic"), url("fonts/opendyslexic-regular.woff2") format("woff2");
-	font-weight: 400;
-	font-display: swap;
-}
-
 /* Ergänzende Tokens, die tokens.json bewusst nicht führt. */
 :root {
 	--accent-text: #ffffff;
@@ -65,14 +58,15 @@
 	}
 }
 
-/* LRS-Schrift: umschaltbare OpenDyslexic-Alternative für den Fließtext.
-   Anzeige/Code/Diff bleiben in der Dot-Matrix-Welt der Spec. */
-body.schrift-lrs {
-	--schrift-body: "OpenDyslexic", ui-monospace, "Cascadia Code", Consolas, monospace;
-}
-
 * {
 	box-sizing: border-box;
+}
+
+/* Das hidden-Attribut muss gegen Autoren-display gewinnen (z. B.
+   display: flex auf .dialog-overlay) — sonst bleiben Overlays sichtbar,
+   obwohl sie versteckt sind. */
+[hidden] {
+	display: none !important;
 }
 
 html,
@@ -137,26 +131,6 @@ body {
 	font-size: 16px;
 }
 
-/* Modus-Dot-Leiste: aktives Segment in --accent, inaktive ohne Farbe
-   bei 40 % Deckkraft. Das Textlabel daneben ist Pflicht (Spec). */
-.modus-anzeige {
-	display: inline-flex;
-	align-items: center;
-	gap: 0.5rem;
-	font-family: var(--schrift-display);
-	font-weight: 700;
-}
-
-.modus-punkte {
-	letter-spacing: 0.2em;
-	color: var(--accent);
-}
-
-.modus-punkte .punkt--leer {
-	color: var(--text);
-	opacity: 0.4;
-}
-
 .modell-name {
 	color: var(--text-muted);
 }
@@ -168,6 +142,13 @@ body {
 .verbindung--getrennt {
 	color: var(--accent);
 	font-weight: 700;
+}
+
+/* Kopf-Aktionsknöpfe (＋ neuer Thread, ⋯ Menü): kompakte Quadrat-Optik. */
+.kopf-aktion {
+	min-width: 40px;
+	font-family: var(--schrift-display);
+	letter-spacing: 0.08em;
 }
 
 /* --- Chat-Verlauf ---------------------------------------------------- */
@@ -263,6 +244,114 @@ code {
 	padding: 0.4rem 1rem;
 }
 
+/* Rollen-Labels („Du“ / „Syntax Bot“) wie in der VS-Code-Version. */
+.nachricht-rolle {
+	font-family: var(--schrift-display);
+	font-size: 14px;
+	font-weight: 700;
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	color: var(--text-muted);
+	margin-bottom: 0.3rem;
+	user-select: none;
+}
+
+.nachricht--nutzer .nachricht-rolle {
+	color: var(--bg);
+	opacity: 0.7;
+	text-align: right;
+}
+
+/* --- Denk-Blöcke (VS-Code-Parität): offen beim Denken, danach einklappbar */
+
+.nachricht--denken {
+	background: var(--surface);
+	border: 1px dashed var(--border);
+	opacity: 0.9;
+}
+
+.denken-kopf {
+	display: flex;
+	align-items: center;
+	gap: 0.6rem;
+	background: none;
+	border: none;
+	color: var(--text-muted);
+	font-family: inherit;
+	font-size: 16px;
+	font-weight: 700;
+	padding: 0;
+	cursor: pointer;
+	width: 100%;
+	text-align: left;
+}
+
+.denken-kopf:hover {
+	color: var(--text);
+}
+
+.denken-status {
+	font-weight: 400;
+	font-size: 14px;
+}
+
+.nachricht--denken.denken-fertig .denken-status {
+	display: none;
+}
+
+.denken-pfeil {
+	margin-left: auto;
+	transition: transform 120ms ease-out;
+}
+
+.nachricht--denken.denken-eingeklappt .denken-pfeil {
+	transform: rotate(-90deg);
+}
+
+.denken-inhalt {
+	white-space: pre-wrap;
+	font-style: italic;
+	color: var(--text-muted);
+	margin-top: 0.4rem;
+	font-size: 16px;
+}
+
+.nachricht--denken.denken-eingeklappt .denken-inhalt {
+	display: none;
+}
+
+/* --- Code-Block mit Kopfzeile (Sprache + Kopier-Knopf) ------------------- */
+
+.code-block {
+	border: 1px solid var(--border);
+	border-radius: 4px;
+	margin: 0.5rem 0;
+	overflow-x: auto;
+}
+
+.code-block pre {
+	border: none;
+	margin: 0;
+	border-radius: 0;
+}
+
+.code-kopf {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.5rem;
+	padding: 0.25rem 0.6rem;
+	border-bottom: 1px solid var(--border);
+	background: color-mix(in srgb, var(--surface) 80%, transparent);
+}
+
+.code-sprache {
+	font-size: 14px;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	color: var(--text-muted);
+}
+
 .nachricht pre {
 	font-family: var(--schrift-body);
 	font-size: 16px;
@@ -284,10 +373,61 @@ code {
 
 .eingabeformular {
 	display: flex;
-	gap: 0.75rem;
+	flex-direction: column;
+	gap: 0.6rem;
 	max-width: 46rem;
 	margin: 0 auto;
-	align-items: flex-end;
+}
+
+/* Aktionsleiste unter dem Eingabefeld (VS-Code-Parität): links Anhang,
+   rechts Kontext-Anzeige, Modell, Thinking, Modus, Senden. */
+.fuss-werkzeug {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+}
+
+.fuss-abstand {
+	flex: 1;
+}
+
+.fuss-knopf {
+	font: inherit;
+	font-size: 16px;
+	color: var(--text);
+	background: transparent;
+	border: 1px solid var(--border);
+	border-radius: 4px;
+	padding: 0.3rem 0.7rem;
+	min-height: 36px;
+	display: inline-flex;
+	align-items: center;
+	gap: 0.4rem;
+	cursor: pointer;
+	white-space: nowrap;
+}
+
+.fuss-knopf:hover {
+	background: var(--surface);
+}
+
+/* Aktiver Zustand: Modus gewählt — Punkt-Muster plus Haarlinie in --accent. */
+.fuss-knopf--aktiv {
+	border-color: var(--accent);
+	color: var(--accent);
+}
+
+.fuss-knopf .etikett {
+	max-width: 14rem;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.fuss-info {
+	color: var(--text-muted);
+	font-size: 16px;
+	white-space: nowrap;
+	user-select: none;
 }
 
 .eingabeformular textarea {
@@ -563,7 +703,7 @@ code {
 }
 
 .anmeldung {
-	max-width: 30rem;
+	max-width: 34rem;
 	margin: 1.5rem;
 	padding: 2rem 2.25rem;
 	background: var(--surface);
@@ -576,9 +716,279 @@ code {
 	margin-bottom: 1rem;
 }
 
+.anmeldung-text {
+	color: var(--text);
+}
+
+.anmeldung-wege {
+	display: grid;
+	gap: 0.75rem;
+	margin: 1.5rem 0 1rem;
+}
+
 .anmeldung .knopf {
 	display: inline-block;
 	text-decoration: none;
+}
+
+.anmeldung-hinweis {
+	color: var(--text-muted);
+	font-size: 16px;
+	margin: 0;
+}
+
+/* --- Onboarding: fünf Seiten im eigenen Overlay -------------------------
+   Bewusst zentriert (nicht das rechte Dialog-Panel), damit der ruhige
+   Lese-Eindruck erhalten bleibt. */
+
+.onboarding-overlay {
+	justify-content: center !important;
+	align-items: center !important;
+	padding: 1.5rem !important;
+	background: rgba(0, 0, 0, 0.45) !important;
+}
+
+.onboarding {
+	max-width: 44rem;
+	max-height: 88vh;
+}
+
+.onboarding-seite {
+	flex: 1;
+	overflow: auto;
+}
+
+.onboarding-titel {
+	margin: 0 0 0.75rem;
+	font-family: var(--schrift-display);
+	font-size: 22px;
+	font-weight: 700;
+	letter-spacing: 0.06em;
+}
+
+.onboarding-punkte {
+	color: var(--accent);
+	letter-spacing: 0.2em;
+	font-size: 18px;
+}
+
+.onboarding-liste {
+	margin: 0.75rem 0 0;
+	padding-left: 1.4rem;
+	display: grid;
+	gap: 0.5rem;
+}
+
+.onboarding-liste li::marker {
+	color: var(--accent);
+}
+
+.onboarding-form-knoepfe {
+	display: flex;
+	gap: 0.75rem;
+	margin-top: 0.5rem;
+}
+
+.onboarding-steuerung {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.75rem;
+	border-top: 1px solid var(--border);
+	margin-top: 1.25rem;
+	padding-top: 1rem;
+	flex-wrap: wrap;
+}
+
+.onboarding-rechts {
+	display: flex;
+	gap: 0.75rem;
+}
+
+.onboarding-punktleiste {
+	display: inline-flex;
+	gap: 0.4rem;
+	letter-spacing: 0.1em;
+	color: var(--text-muted);
+}
+
+.onb-punkt {
+	opacity: 0.4;
+}
+
+.onb-punkt--aktiv {
+	opacity: 1;
+	color: var(--accent);
+}
+
+/* --- Konto-Seite: Provider-Verwaltung ------------------------------------ */
+
+.konto-seite {
+	display: flex;
+	flex-direction: column;
+}
+
+.konto {
+	width: 100%;
+	max-width: 46rem;
+	margin: 0 auto;
+	padding: 1.5rem 1.25rem 3rem;
+}
+
+.konto-titel {
+	font-family: var(--schrift-display);
+	font-size: 22px;
+	letter-spacing: 0.06em;
+	margin: 0 0 0.5rem;
+}
+
+.konto-hinweis {
+	color: var(--text-muted);
+	margin-top: 0;
+}
+
+.konto-abschnitt {
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: 4px;
+	padding: 1.25rem 1.5rem;
+	margin-top: 1.25rem;
+}
+
+.konto-abschnitt h3 {
+	margin: 0 0 0.75rem;
+	font-size: 18px;
+}
+
+.konto-knoepfe {
+	display: flex;
+	gap: 0.75rem;
+	flex-wrap: wrap;
+	margin-top: 0.75rem;
+}
+
+.provider-liste {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: grid;
+	gap: 0.75rem;
+}
+
+.provider-eintrag {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 1rem;
+	border: 1px solid var(--border);
+	border-radius: 4px;
+	padding: 0.75rem 1rem;
+	flex-wrap: wrap;
+}
+
+.provider-info {
+	display: grid;
+	gap: 0.15rem;
+}
+
+.provider-zeile {
+	color: var(--text-muted);
+	font-size: 16px;
+}
+
+.provider-knoepfe {
+	display: flex;
+	gap: 0.5rem;
+}
+
+.provider-leer {
+	color: var(--text-muted);
+}
+
+.konto-meldungen:empty {
+	display: none;
+}
+
+.konto-meldung {
+	margin: 0 0 0.5rem;
+	padding: 0.5rem 0.85rem;
+	border-radius: 4px;
+	font-size: 16px;
+}
+
+.konto-meldung--hinweis {
+	border: 1px solid var(--border);
+	color: var(--text);
+}
+
+.konto-meldung--fehler {
+	border: 1px solid var(--accent);
+	color: var(--accent);
+}
+
+/* --- Aufklapp-Menüs (Fußleiste, Kopfzeile, „/“-Popup) --------------------
+   Ein gemeinsamer Menü-Baustein; .slash-popup ergänzt nur die Breite. */
+
+.menue {
+	position: fixed;
+	z-index: 20;
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: 4px;
+	padding: 0.3rem;
+	min-width: 16rem;
+	max-width: 30rem;
+	max-height: 60vh;
+	overflow-y: auto;
+	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+}
+
+.slash-popup {
+	min-width: 20rem;
+}
+
+.menue-eintrag {
+	display: flex;
+	align-items: baseline;
+	gap: 0.75rem;
+	width: 100%;
+	background: none;
+	border: none;
+	color: var(--text);
+	font-family: inherit;
+	font-size: 16px;
+	padding: 0.45rem 0.6rem;
+	cursor: pointer;
+	text-align: left;
+	border-radius: 4px;
+}
+
+.menue-eintrag:hover {
+	background: var(--bg);
+}
+
+/* Aktiver Eintrag: Textlabel plus Kennzeichnung in --accent (Spec: nie
+   Farbe allein — aktiver Eintrag bekommt zusätzlich den ✓-Punkt). */
+.menue-eintrag--aktiv {
+	color: var(--accent);
+	font-weight: 700;
+}
+
+.menue-eintrag--aktiv span:first-child::before {
+	content: "● ";
+}
+
+.menue-beschreibung {
+	color: var(--text-muted);
+	font-size: 14px;
+	margin-left: auto;
+	text-align: right;
+}
+
+.menue-leer {
+	color: var(--text-muted);
+	font-size: 16px;
+	padding: 0.45rem 0.6rem;
 }
 
 @media (prefers-reduced-motion: reduce) {

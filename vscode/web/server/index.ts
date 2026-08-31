@@ -41,6 +41,7 @@ import {
 	defaultSessionHostOptions,
 	SessionHost,
 	type ClientMessage,
+	type HostedSession,
 } from "./session-host.ts";
 
 const uiDir = join(dirname(fileURLToPath(import.meta.url)), "..", "ui");
@@ -53,10 +54,20 @@ const MIME_TYPES: Record<string, string> = {
 	".png": "image/png",
 	".ico": "image/x-icon",
 	".json": "application/json; charset=utf-8",
+	".woff2": "font/woff2",
 };
 
 const SESSION_COOKIE_NAME = "syntax-bot-session";
 const STATE_LIFETIME_MS = 10 * 60 * 1000;
+
+/** Ab hier wird die App ausgeliefert — die Startseite »/« ist die Anmeldung. */
+const ROUTEN_DATEI: Record<string, string> = {
+	"/app": "/index.html",
+	"/konto": "/konto.html",
+};
+
+/** Markierungen im login.html für den optionalen GitHub-Anmeldeblock. */
+const OAUTH_BLOCK_MUSTER = /<!-- OAUTH-ANFANG -->[\s\S]*?<!-- OAUTH-ENDE -->\n?/;
 
 /** Mindeststruktur einer ws-Verbindung — das Paket ws liefert selbst keine Typen mit. */
 interface SocketConnection {
@@ -101,10 +112,17 @@ function userFromRequest(context: ServerContext, request: IncomingMessage): WebU
 	return context.sessions.get(token)?.user;
 }
 
-/** Statische Datei ausliefern — ohne je das UI-Verzeichnis zu verlassen. */
-async function serveStatic(request: IncomingMessage, response: ServerResponse, datei = "/index.html"): Promise<void> {
+/** Statische Datei ausliefern — ohne je das UI-Verzeichnis zu verlassen.
+    Routen ohne Dateiendung werden auf ihre Seite abgebildet (»/app« …). */
+async function serveStatic(
+	request: IncomingMessage,
+	response: ServerResponse,
+	context: ServerContext,
+	datei?: string,
+): Promise<void> {
 	const url = new URL(request.url ?? "/", "http://localhost");
-	const pathname = datei !== "/index.html" ? datei : url.pathname === "/" ? "/index.html" : url.pathname;
+	let pathname = datei ?? ROUTEN_DATEI[url.pathname] ?? url.pathname;
+	if (pathname === "/") pathname = context.oauth ? "/index.html" : "/login.html";
 	const filePath = normalize(join(uiDir, pathname));
 
 	if (!filePath.startsWith(uiDir) || !existsSync(filePath)) {
@@ -113,12 +131,25 @@ async function serveStatic(request: IncomingMessage, response: ServerResponse, d
 		return;
 	}
 
-	const content = await readFile(filePath);
+	let inhalt: Buffer = await readFile(filePath);
+
+	// Anmeldeseite: GitHub-Block nur zeigen, wenn OAuth konfiguriert ist;
+	// sonst bleibt nur der Weg »Ohne Provider fortfahren«.
+	if (pathname === "/login.html") {
+		let html = inhalt.toString("utf8");
+		if (context.oauth) {
+			html = html.replace("<!-- OAUTH-ANFANG -->", "").replace("<!-- OAUTH-ENDE -->", "");
+		} else {
+			html = html.replace(OAUTH_BLOCK_MUSTER, "");
+		}
+		inhalt = Buffer.from(html, "utf8");
+	}
+
 	response.writeHead(200, {
 		"content-type": MIME_TYPES[extname(filePath)] ?? "application/octet-stream",
 		"cache-control": "no-store",
 	});
-	response.end(content);
+	response.end(inhalt);
 }
 
 function antworteText(response: ServerResponse, status: number, text: string): void {
@@ -160,7 +191,7 @@ async function behandleCallback(context: ServerContext, request: IncomingMessage
 		const user = await fetchGithubUser(oauth, accessToken);
 		const session = context.sessions.create(user);
 		response.writeHead(302, {
-			location: "/",
+			location: "/app",
 			"set-cookie": sessionCookie(session, oauth.secureCookie),
 		});
 		response.end();
@@ -221,11 +252,19 @@ async function main(): Promise<void> {
 			}
 			if (pfad === "/auth/logout") return behandleLogout(context, request, response);
 
-			// Login-Gate: mit OAuth kommt nur eine gültige Session zur UI.
-			if (oauth && !userFromRequest(context, request)) {
-				return void serveStatic(request, response, "/login.html");
+			const nutzer = userFromRequest(context, request);
+			// Mit OAuth kommt nur eine gültige Session zur App — statische
+			// Bausteine (CSS, JS, Schriften) braucht aber schon die Anmeldeseite.
+			const istStatik = /\.[a-z0-9]+$/i.test(pfad);
+			if (context.oauth && !nutzer && !istStatik) {
+				return void serveStatic(request, response, context, "/login.html");
 			}
-			return void serveStatic(request, response);
+			// Angemeldet auf der Startseite → direkt zur App.
+			if (pfad === "/" && context.oauth && nutzer) {
+				response.writeHead(302, { location: "/app" });
+				return response.end();
+			}
+			return void serveStatic(request, response, context);
 		} catch (error) {
 			antworteText(response, 500, `Serverfehler: ${error instanceof Error ? error.message : String(error)}`);
 		}
@@ -258,7 +297,7 @@ async function main(): Promise<void> {
 			if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(message));
 		};
 
-		let hosted;
+		let hosted: HostedSession;
 		try {
 			hosted = await sessionHost.open(send, user);
 		} catch (error) {
@@ -277,6 +316,20 @@ async function main(): Promise<void> {
 				message = JSON.parse(data.toString());
 			} catch {
 				return; // Kaputte Nachrichten fallen still unter den Tisch.
+			}
+			// Neuer Thread: Session wegwerfen und auf derselben Verbindung neu aufbauen.
+			if (message?.type === "new_thread") {
+				try {
+					await hosted.dispose();
+					hosted = await sessionHost.open(send, user);
+				} catch (error) {
+					send({
+						type: "notify",
+						level: "error",
+						message: `Neuer Thread fehlgeschlagen: ${error instanceof Error ? error.message : String(error)}`,
+					});
+				}
+				return;
 			}
 			await hosted.handleMessage(message);
 		});

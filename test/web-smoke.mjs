@@ -2,7 +2,8 @@
  * Manueller Smoke-Test für den Web-Server (nicht Teil der Suite).
  *
  * Erwartet einen laufenden Server, prüft:
- *  1. HTTP liefert die Oberfläche aus (GET / → index.html, inkl. BYOM-Dialog)
+ *  1. HTTP liefert die Oberfläche aus (GET /app → index.html, inkl.
+ *     Aktionsleiste; GET / ist die Anmeldeseite)
  *  2. WebSocket begrüßt mit "ready" (+ Modell-Warnung)
  *  3. Ein Slash-Command (/syntax-fix) meldet den Modus per "status"
  *  4. BYOM: ungültige Konfiguration und unerreichbarer Endpunkt
@@ -26,12 +27,19 @@ function pruefe(name, bedingung, detail = "") {
 	}
 }
 
-// 1. HTTP: Oberfläche wird ausgeliefert.
-const antwort = await fetch(`${basis}/`);
+// 1. HTTP: Anmeldeseite und App-Oberfläche werden ausgeliefert.
+const start = await fetch(`${basis}/`);
+const startHtml = await start.text();
+pruefe("GET / liefert 200", start.status === 200, `Status ${start.status}`);
+pruefe("GET / liefert die Anmeldeseite", startHtml.includes("Syntax Bot"));
+
+const antwort = await fetch(`${basis}/app`);
 const html = await antwort.text();
-pruefe("GET / liefert 200", antwort.status === 200, `Status ${antwort.status}`);
-pruefe("GET / liefert die UI", html.includes("Syntax Bot") && html.includes("verlauf"));
-pruefe("UI enthält BYOM-Einstellungsdialog", html.includes("byom-endpunkt") && html.includes("modell-knopf"));
+pruefe("GET /app liefert 200", antwort.status === 200, `Status ${antwort.status}`);
+pruefe("GET /app liefert die UI", html.includes("Syntax Bot") && html.includes("verlauf"));
+pruefe("UI enthält Onboarding und Kopf-Aktionen", html.includes("onboarding-overlay") && html.includes("neu-knopf") && html.includes("menue-knopf"));
+pruefe("Aktionsleiste unter der Eingabe", html.includes("fuss-werkzeug") && html.includes("modell-knopf") && html.includes("kontext-anzeige"));
+pruefe("LRS-Schrift ist entfernt", !html.includes("opendyslexic") && !html.includes("schrift-lrs"));
 
 // 2./3. WebSocket: ready empfangen, /syntax-fix schalten.
 const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`);

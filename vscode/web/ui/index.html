@@ -10,16 +10,13 @@
 	<header class="kopfzeile">
 		<h1 class="wortmarke">SYNTAX·BOT</h1>
 		<div class="statusbereich">
-			<span id="modus-anzeige" class="modus-anzeige" hidden>
-				<span id="modus-punkte" class="modus-punkte" aria-hidden="true"></span>
-				<span id="modus-name"></span>
-			</span>
-			<span id="modell-name" class="modell-name"></span>
-			<button id="schrift-knopf" type="button" class="knopf knopf--klein" aria-pressed="false"
-				title="OpenDyslexic als Schrift für den Fließtext">LRS-Schrift</button>
-			<button id="modell-knopf" type="button" class="knopf knopf--klein">Modell</button>
 			<span id="nutzer-name" class="nutzer-name" hidden></span>
 			<span id="verbindung" class="verbindung verbindung--getrennt">getrennt</span>
+			<a id="konto-knopf" class="knopf knopf--klein" href="/konto">Konto</a>
+			<button id="neu-knopf" type="button" class="knopf knopf--klein kopf-aktion"
+				title="Neuer Thread" aria-label="Neuer Thread">＋</button>
+			<button id="menue-knopf" type="button" class="knopf knopf--klein kopf-aktion"
+				title="Menü" aria-haspopup="menu" aria-label="Menü">⋯</button>
 		</div>
 	</header>
 
@@ -47,7 +44,22 @@
 			<label for="eingabe" class="visually-hidden">Nachricht an Syntax Bot</label>
 			<textarea id="eingabe" rows="3" autocomplete="off"
 				placeholder="Nachricht oder /modus eingeben …"></textarea>
-			<button id="sende-knopf" type="submit" class="knopf knopf--primaer">Senden</button>
+			<!-- Aktionsleiste wie in der VS-Code-Version: links Anhang, rechts
+			     Kontext-Anzeige, Modell, Thinking-Stufe, Modus und Senden. -->
+			<div class="fuss-werkzeug">
+				<button id="anhang-knopf" type="button" class="fuss-knopf"
+					title="Datei anhängen" aria-label="Datei anhängen">＋</button>
+				<input type="file" id="anhang-eingabe" multiple hidden>
+				<span class="fuss-abstand"></span>
+				<span id="kontext-anzeige" class="fuss-info" title="Kontext-Füllstand">—</span>
+				<button id="modell-knopf" type="button" class="fuss-knopf" title="Modell wählen"
+					aria-haspopup="menu"><span class="etikett">Modell</span></button>
+				<button id="thinking-knopf" type="button" class="fuss-knopf" title="Thinking-Stufe"
+					aria-haspopup="menu"><span class="etikett">Think</span></button>
+				<button id="modus-knopf" type="button" class="fuss-knopf" title="Modus wählen"
+					aria-haspopup="menu"><span class="etikett">Modus</span></button>
+				<button id="sende-knopf" type="submit" class="knopf knopf--primaer">Senden</button>
+			</div>
 		</form>
 	</footer>
 
@@ -60,33 +72,93 @@
 		</div>
 	</div>
 
-	<!-- Einstellungsdialog: eigenes Modell verbinden (BYOM) -->
-	<div id="einstellungen-overlay" class="dialog-overlay" hidden>
-		<div class="dialog" role="dialog" aria-modal="true" aria-labelledby="einstellungen-titel">
-			<h2 id="einstellungen-titel">Eigenes Modell verbinden</h2>
-			<div class="dialog-inhalt">
-				<p class="einstellungen-hinweis">
-					OpenAI-kompatibler Endpunkt — z.&nbsp;B. Ollama, LM Studio oder llama.cpp.
-					Der Schlüssel bleibt ausschließlich im Arbeitsspeicher des Servers.
+	<!-- Onboarding: fünf Seiten, beim ersten Besuch automatisch -->
+	<div id="onboarding-overlay" class="dialog-overlay onboarding-overlay" hidden>
+		<div class="dialog onboarding" role="dialog" aria-modal="true" aria-labelledby="onboarding-titel">
+			<section class="onboarding-seite" data-seite="0">
+				<h2 class="onboarding-titel">Was ist Syntax Bot?</h2>
+				<p>
+					Syntax Bot ist ein Coding-Assistent für Menschen mit
+					Lese-Rechtschreib-Schwäche (LRS). Er verbessert Rechtschreibung
+					und Syntax in deinem Code — <strong>ohne die Logik anzufassen</strong>.
+				</p>
+				<ul class="onboarding-liste">
+					<li>Du bringst dein eigenes Modell mit (BYOM): eigener API-Key oder eigener Endpunkt.</li>
+					<li>Diff-First: Jede Änderung bekommst du zuerst als Vorschau — nichts wird ohne dein Ja geschrieben.</li>
+					<li>Drei Modi für drei Aufgaben: Syntax Fix, Code Fix und Cleanup.</li>
+				</ul>
+			</section>
+			<section class="onboarding-seite" data-seite="1" hidden>
+				<h2 class="onboarding-titel">Syntax Fix <span class="onboarding-punkte" aria-hidden="true">●○○</span></h2>
+				<p>
+					Der vorsichtige Modus. <code>/syntax-fix</code> korrigiert nur
+					Rechtschreib- und Syntaxfehler: Tippfehler in Namen und Strings,
+					fehlende Klammern oder Semikolons.
+				</p>
+				<ul class="onboarding-liste">
+					<li>Reine Lese-Werkzeuge — deine Dateien werden nicht direkt verändert.</li>
+					<li>Programmlogik bleibt garantiert unangetastet.</li>
+					<li>Jede Korrektur erscheint als Diff-Vorschau zum Bestätigen.</li>
+				</ul>
+			</section>
+			<section class="onboarding-seite" data-seite="2" hidden>
+				<h2 class="onboarding-titel">Code Fix <span class="onboarding-punkte" aria-hidden="true">●●○</span></h2>
+				<p>
+					Der gründliche Modus. <code>/code-fix</code> behebt zusätzlich
+					Logik- und Strukturfehler: falsche Bedingungen, fehlerhafte
+					Funktionsaufrufe, kaputte Abläufe.
+				</p>
+				<ul class="onboarding-liste">
+					<li>Darf schreiben und testen — aber immer erst nach deiner Bestätigung.</li>
+					<li>Gut für Fehler, die der Compiler allein nicht findet.</li>
+					<li>Die Diff-Vorschau zeigt dir vorher genau, was sich ändert.</li>
+				</ul>
+			</section>
+			<section class="onboarding-seite" data-seite="3" hidden>
+				<h2 class="onboarding-titel">Cleanup <span class="onboarding-punkte" aria-hidden="true">◐◐◐</span></h2>
+				<p>
+					Der ordnende Modus. <code>/cleanup</code> formatiert deinen Code
+					nach dem Linux-Kernel-Stil: Einrückung, Zeilenlänge, Namensgebung.
+				</p>
+				<ul class="onboarding-liste">
+					<li>Nur Struktur und Formatierung — keinerlei Logikänderungen.</li>
+					<li>Einheitlicher Stil für bessere Lesbarkeit.</li>
+					<li>Wie immer: Vorschau zuerst, schreiben erst nach deinem Ja.</li>
+				</ul>
+			</section>
+			<section class="onboarding-seite" data-seite="4" hidden>
+				<h2 class="onboarding-titel">Dein Modell verbinden</h2>
+				<p>
+					Syntax Bot braucht ein Sprachmodell — du bringst es selbst mit.
+					Verbinde jetzt einen OpenAI-kompatiblen Endpunkt (z.&nbsp;B. Ollama,
+					LM Studio oder llama.cpp), oder überspringe diesen Schritt und
+					richte ihn später unter »Konto« ein.
 				</p>
 				<div class="einstellungen-zeile">
-					<label for="byom-endpunkt">Endpunkt</label>
-					<input id="byom-endpunkt" type="url" autocomplete="off" placeholder="http://localhost:11434/v1">
+					<label for="onb-endpunkt">Endpunkt</label>
+					<input id="onb-endpunkt" type="url" autocomplete="off" placeholder="http://localhost:11434/v1">
 				</div>
 				<div class="einstellungen-zeile">
-					<label for="byom-schluessel">API-Key (optional)</label>
-					<input id="byom-schluessel" type="password" autocomplete="off" placeholder="leer lassen für lokale Endpunkte">
+					<label for="onb-schluessel">API-Key (optional)</label>
+					<input id="onb-schluessel" type="password" autocomplete="off" placeholder="leer lassen für lokale Endpunkte">
 				</div>
 				<div class="einstellungen-zeile">
-					<label for="byom-modell">Modell-ID</label>
-					<input id="byom-modell" type="text" autocomplete="off" placeholder="z. B. llama3.1:8b">
+					<label for="onb-modell">Modell-ID</label>
+					<input id="onb-modell" type="text" autocomplete="off" placeholder="z. B. llama3.1:8b">
 				</div>
-				<select id="byom-modellliste" class="einstellungen-liste" size="5" hidden aria-label="Verfügbare Modelle"></select>
-			</div>
-			<div class="dialog-knoepfe">
-				<button id="byom-schliessen" type="button" class="knopf knopf--sekundaer">Schließen</button>
-				<button id="byom-testen" type="button" class="knopf knopf--sekundaer">Verbindung testen</button>
-				<button id="byom-speichern" type="button" class="knopf knopf--primaer">Speichern</button>
+				<select id="onb-modellliste" class="einstellungen-liste" size="5" hidden aria-label="Verfügbare Modelle"></select>
+				<div class="onboarding-form-knoepfe">
+					<button id="onb-testen" type="button" class="knopf knopf--sekundaer">Verbindung testen</button>
+				</div>
+			</section>
+
+			<div class="onboarding-steuerung">
+				<button id="onb-ueberspringen" type="button" class="knopf knopf--sekundaer">Überspringen</button>
+				<span id="onb-punkte" class="onboarding-punktleiste" aria-hidden="true"></span>
+				<span class="onboarding-rechts">
+					<button id="onb-zurueck" type="button" class="knopf knopf--sekundaer" hidden>Zurück</button>
+					<button id="onb-weiter" type="button" class="knopf knopf--primaer">Weiter</button>
+				</span>
 			</div>
 		</div>
 	</div>
