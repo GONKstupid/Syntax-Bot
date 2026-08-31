@@ -12,20 +12,47 @@
 		<p class="anmeldung-text">
 			Syntax Bot korrigiert Rechtschreib- und Syntaxfehler in deinem Code,
 			ohne die Logik anzufassen — und zeigt dir jede Änderung vorher.
-			Die Anmeldung und deine Modell-Anbieter sind dabei unabhängig:
-			Du kannst jederzeit eigene Provider einrichten.
+			Mit einem Konto merkt sich Syntax Bot deine Modell-Anbieter
+			und deine Thread-History.
 		</p>
-		<div class="anmeldung-wege">
-			<!-- OAUTH-ANFANG -->
-			<a class="knopf knopf--primaer" href="/auth/login">Mit GitHub anmelden</a>
-			<!-- OAUTH-ENDE -->
-			<a class="knopf knopf--sekundaer" href="/app">Ohne Provider fortfahren</a>
+
+		<div class="anmeldung-umschalter" role="tablist" aria-label="Anmelden oder Registrieren">
+			<button id="umschalter-anmelden" type="button" class="umschalter umschalter--aktiv" role="tab" aria-selected="true">Anmelden</button>
+			<button id="umschalter-registrieren" type="button" class="umschalter" role="tab" aria-selected="false">Registrieren</button>
 		</div>
+
+		<form id="anmeldeformular" class="anmeldung-formular" autocomplete="on">
+			<div class="einstellungen-zeile" id="zeile-nutzername" hidden>
+				<label for="feld-nutzername">Nutzername</label>
+				<input id="feld-nutzername" name="nutzername" type="text" autocomplete="username"
+					placeholder="z. B. ada_lovelace">
+			</div>
+			<div class="einstellungen-zeile">
+				<label for="feld-kennung" id="kennung-etikett">Nutzername oder E-Mail</label>
+				<input id="feld-kennung" name="kennung" type="text" autocomplete="username" required>
+			</div>
+			<div class="einstellungen-zeile" id="zeile-email" hidden>
+				<label for="feld-email">E-Mail</label>
+				<input id="feld-email" name="email" type="email" autocomplete="email" placeholder="du@example.de">
+			</div>
+			<div class="einstellungen-zeile">
+				<label for="feld-passwort">Passwort</label>
+				<input id="feld-passwort" name="passwort" type="password" autocomplete="current-password"
+					required minlength="8">
+			</div>
+			<p id="anmeldung-fehler" class="anmeldung-fehler" role="alert" hidden></p>
+			<div class="anmeldung-wege">
+				<button type="submit" id="anmeldung-absenden" class="knopf knopf--primaer">Anmelden</button>
+				<a class="knopf knopf--sekundaer" href="/app">Ohne Konto fortfahren</a>
+			</div>
+		</form>
+
 		<p class="anmeldung-hinweis">
-			Ohne Anmeldung arbeitet Syntax Bot nur auf diesem Gerät.
-			Deinen Modell-Anbieter (API-Key oder eigener Endpunkt) richtest du
-			unter »Konto« ein — vor oder nach dem Start.
+			Ohne Konto arbeitet Syntax Bot nur auf diesem Gerät — der Verlauf
+			wird nicht gespeichert und Anbieter müssen jedes Mal neu eingerichtet
+			werden.
 		</p>
 	</main>
+	<script type="module" src="login.js"></script>
 </body>
 </html>

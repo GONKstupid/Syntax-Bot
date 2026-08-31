@@ -80,9 +80,9 @@ Verhaltensprofilen.
 - **Deployment:** eigenständiger Web-Agent zuerst, danach externer Agent für
   Zed, VS Code (weitere Editoren später möglich).
 - **Web-Reichweite:** öffentlich erreichbares Chat-Interface mit
-  OAuth-Login (Multi-User); das Modell bringt jeder Nutzer selbst mit
-  (BYOM: eigener API-Key oder eigener OpenAI-kompatibler Endpunkt,
-  z. B. Ollama, LM Studio, llama.cpp).
+  Konto-Anmeldung (Multi-User); das Modell bringt jeder Nutzer selbst mit
+  (BYOM: eigener API-Key, Browser-Anmeldung/Subscription oder eigener
+  OpenAI-kompatibler Endpunkt, z. B. Ollama, LM Studio, llama.cpp).
 - **Modellwahl frei:** API-Key, Subscription-Login (z. B. Claude Pro/Max,
   ChatGPT Plus/Pro, GitHub Copilot) oder lokales Modell — alles, was die
   Pi-Provider-Abstraktion unterstützt.
@@ -138,8 +138,14 @@ Verhaltensprofilen.
 1. **Web** — eigenständiger, browserbasierter Agent. Ein schlanker
    Server-Prozess (`node:http` + `ws`, kein Framework) hält pro Nutzer eine
    Pi-SDK-Session und spricht per WebSocket mit dem Frontend (Chat +
-   Diff-Ansicht). Öffentlich betrieben wird er mit OAuth-Login (Multi-User);
-   ohne konfiguriertes OAuth bindet er nur auf `127.0.0.1`. Jede Session
+   Diff-Ansicht). Die Anmeldung läuft über lokale Konten (Registrierung/
+   Login mit Nutzername, E-Mail und Passwort, scrypt-Hashes); ohne
+   `SYNTAX_BOT_PUBLIC_BIND=1` bindet der Server nur auf `127.0.0.1`.
+   Angemeldete Konten merken sich ihre Modell-Anbieter (API-Key,
+   Browser-Anmeldung, eigener Endpunkt — je ein CredentialStore pro Konto)
+   und ihre Thread-History (alte Threads sind über das ⋯-Menü mit vollem
+   Modell-Kontext fortsetzbar); „ohne Konto fortfahren“ bleibt möglich,
+   dann ohne Persistenz. Jede Session
    bekommt einen abgeschotteten Arbeitsbereich (Jail), `bash` ist im Web
    standardmäßig deaktiviert; HTTPS terminiert ein Reverse-Proxy.
    Angemeldete Nutzer erhalten einen dauerhaften Arbeitsbereich
@@ -466,9 +472,10 @@ Code nicht als vierte Extension lädt. Zusätzlich sind die vier Extensions in
 | Cleanup-Stilquelle | Linux-Kernel `coding-style.rst`, als Repo-Asset gebündelt |
 | Cleanup-Grenze | Keine Logikänderungen, nur Struktur/Formatierung |
 | UI-Design | Monochrome, von Nothing inspirierte Ästhetik mit einem roten Akzent; ausschließlich offene Lizenzen (MIT / OFL / Apache-2.0 / CC0), keine Nothing-Assets oder -Fonts |
-| Web-Reichweite | Öffentlich erreichbarer Chat; öffentliches Binden nur mit konfiguriertem OAuth |
-| Auth | OAuth (GitHub zuerst), Multi-User, HttpOnly+Secure Session-Cookie |
-| Modell im Web | BYOM — eigener API-Key oder OpenAI-kompatibler Endpunkt (Ollama, LM Studio, llama.cpp); Schlüssel nur im Arbeitsspeicher |
+| Web-Reichweite | Öffentlich erreichbarer Chat; öffentliches Binden nur mit `SYNTAX_BOT_PUBLIC_BIND=1` |
+| Auth | Lokale Konten (Nutzername/E-Mail/Passwort, scrypt), Multi-User, HttpOnly+Secure Session-Cookie; „ohne Konto“ nur auf localhost |
+| Konto-Gedächtnis | Pro Konto: gemerkte Modell-Anbieter (drei Wege wie in der IDE, eigener CredentialStore) + Thread-History mit Fortsetzen |
+| Modell im Web | BYOM — eigener API-Key, Browser-Anmeldung (OAuth) oder OpenAI-kompatibler Endpunkt (Ollama, LM Studio, llama.cpp); pro Konto persistiert |
 | Bash im Web | Standardmäßig blockiert; Opt-in nur per `SYNTAX_BOT_WEB_BASH=1` |
 | HTTPS | Terminierung über Reverse-Proxy (Caddy/nginx), kein Zertifikats-Code im Server |
 
@@ -487,7 +494,8 @@ Code nicht als vierte Extension lädt. Zusätzlich sind die vier Extensions in
 - Formale Prüfung der Logik-Unveränderlichkeit in `Cleanup` (aktuell nur
   best-effort über Linter/Formatter).
 - ~~Auth-/Sicherheitsmodell für den Web-Standalone-Agent~~ — **entschieden:**
-  öffentlich + OAuth (GitHub zuerst) + BYOM; `bash` im Web standardmäßig
+  lokale Konten (ersetzen das zuerst geplante GitHub-OAuth) + BYOM/Provider-
+  Drei-Wege + Thread-History pro Konto; `bash` im Web standardmäßig
   blockiert, Pfad-Jail pro Session. Container-Isolation bleibt
   Phase-3-Kandidat.
 - Lizenzmodell / Repo-Sichtbarkeit.

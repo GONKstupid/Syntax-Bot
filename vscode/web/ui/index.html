@@ -72,6 +72,17 @@
 		</div>
 	</div>
 
+	<!-- Thread-Verlauf: gespeicherte Gespräche öffnen und fortsetzen -->
+	<div id="threads-overlay" class="dialog-overlay" hidden>
+		<div class="dialog" role="dialog" aria-modal="true" aria-labelledby="threads-titel">
+			<h2 id="threads-titel">Threads</h2>
+			<div id="threads-liste" class="dialog-inhalt threads-liste"></div>
+			<div class="dialog-knoepfe">
+				<button id="threads-schliessen" type="button" class="knopf knopf--sekundaer">Schließen</button>
+			</div>
+		</div>
+	</div>
+
 	<!-- Onboarding: fünf Seiten, beim ersten Besuch automatisch -->
 	<div id="onboarding-overlay" class="dialog-overlay onboarding-overlay" hidden>
 		<div class="dialog onboarding" role="dialog" aria-modal="true" aria-labelledby="onboarding-titel">
@@ -130,9 +141,12 @@
 				<h2 class="onboarding-titel">Dein Modell verbinden</h2>
 				<p>
 					Syntax Bot braucht ein Sprachmodell — du bringst es selbst mit.
-					Verbinde jetzt einen OpenAI-kompatiblen Endpunkt (z.&nbsp;B. Ollama,
-					LM Studio oder llama.cpp), oder überspringe diesen Schritt und
-					richte ihn später unter »Konto« ein.
+					Drei Wege stehen offen: API-Key (Anthropic, OpenAI, …), Anmeldung
+					im Browser (Claude Pro/Max, ChatGPT-Plus, …) oder ein eigener
+					OpenAI-kompatibler Endpunkt (z.&nbsp;B. Ollama, LM Studio,
+					llama.cpp). Alle drei findest du unter »Konto« — hier kannst du
+					direkt mit einem eigenen Endpunkt starten oder den Schritt
+					überspringen.
 				</p>
 				<div class="einstellungen-zeile">
 					<label for="onb-endpunkt">Endpunkt</label>

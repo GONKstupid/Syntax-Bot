@@ -189,7 +189,32 @@ dazu:
    Modus-Auswahl; Diff-Rückfragen kommen als Berechtigungsdialog.
 
 Falls sich etwas anders als in Zed verhält, liefert der Befehl
-„ACP: Show Protocol Traffic" den JSON-RPC-Verkehr zum Vergleich.
+„ACP: Show Protocol Traffic“ den JSON-RPC-Verkehr zum Vergleich.
+
+## Syntax Bot im Web
+
+```bash
+npm run web   # http://127.0.0.1:4711 (Port: SYNTAX_BOT_WEB_PORT)
+```
+
+Beim ersten Besuch kann ein Konto angelegt werden (Nutzername, E-Mail,
+Passwort — lokal gespeichert, Passwort als scrypt-Hash). Mit Konto merkt
+sich Syntax Bot die verbundenen Modell-Anbieter (API-Key, Anmeldung im
+Browser für Claude Pro/Max & Co., oder eigener OpenAI-kompatibler
+Endpunkt) und sammelt eine Thread-History: Über das ⋯-Menü lassen sich
+alte Gespräche öffnen und mit vollem Modell-Kontext fortsetzen. „Ohne
+Konto fortfahren“ bleibt möglich — dann wird allerdings nichts gemerkt.
+
+Jede Verbindung arbeitet in einem abgeschotteten Arbeitsbereich; `bash`
+ist standardmäßig blockiert (`SYNTAX_BOT_WEB_BASH=1` schaltet es frei).
+
+| Umgebungsvariable | Wirkung |
+|---|---|
+| `SYNTAX_BOT_WEB_PORT` | anderer Port statt 4711 |
+| `SYNTAX_BOT_PUBLIC_BIND=1` | ins Netz binden (Standard: nur `127.0.0.1`) |
+| `SYNTAX_BOT_SECURE=1` | Session-Cookie mit `Secure` (hinter HTTPS-Proxy) |
+| `SYNTAX_BOT_TRUST_PROXY=1` | `X-Forwarded-For` für Rate-Limits auswerten |
+| `SYNTAX_BOT_MAX_SESSIONS` | max. parallele Verbindungen pro Konto (Standard 2) |
 
 ## Entwicklung
 
@@ -219,8 +244,8 @@ Formatter ausführen kann.
 ## Bekannte Lücken
 
 Phase 1 und Phase 2 der Roadmap sind weitgehend umgesetzt: Web-Agent (mit
-OAuth/BYOM) läuft, die IDE-Anbindung ist für Zed nativ und für VS Code über
-die Community-Extension „ACP Client" umgesetzt. Offen sind
+Konto-System/BYOM/Thread-History) läuft, die IDE-Anbindung ist für Zed nativ und für VS Code über
+die Community-Extension „ACP Client“ umgesetzt. Offen sind
 die Vertiefung der IDE-Anbindung (Kontext wie offene Datei/Selektion)
 sowie eine formale Prüfung der Logik-Unveränderlichkeit im
 Cleanup-Modus — Details in `HANDOFF.md`.

@@ -21,11 +21,13 @@ export interface StoredProvider {
 	apiKey: string;
 	modelId: string;
 	savedAt: number;
+	/** Anmeldeweg — ältere Einträge ohne Feld gelten als „custom“. */
+	art?: "custom" | "api" | "oauth";
 }
 
 /** Konto-Kennung: angemeldete Nutzer über ihre ID, sonst das Standard-Konto. */
 export function kontoIdVon(user?: { id: string }): string {
-	return user ? `gh-${user.id.replace(/[^a-zA-Z0-9_-]/g, "")}` : "default";
+	return user ? `konto-${user.id.replace(/[^a-zA-Z0-9_-]/g, "")}` : "default";
 }
 
 type StoreInhalt = Record<string, StoredProvider[]>;

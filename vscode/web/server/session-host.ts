@@ -10,19 +10,24 @@
  * deshalb stören sich parallele Verbindungen hier nicht gegenseitig.
  */
 
-import { randomInt } from "node:crypto";
+import { randomInt, randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import {
 	createAgentSession,
 	DefaultResourceLoader,
+	ModelRuntime,
+	SessionManager,
 	type AgentSession,
 } from "@earendil-works/pi-coding-agent";
 import type { WebUser } from "./auth.ts";
 import { applyByomToSession, fetchRemoteModels, validateByomConfig } from "./byom.ts";
 import { createJailExtension } from "./jail-extension.ts";
+import { credentialDateiFuer, KontoCredentialStore } from "./konto-credentials.ts";
 import { kontoIdVon, ProviderStore } from "./provider-store.ts";
+import { ThreadStore, type ThreadEintrag } from "./thread-store.ts";
 import { WebUiBridge, type ServerMessage } from "./ui-bridge.ts";
 
 export interface SessionHostOptions {
@@ -34,6 +39,10 @@ export interface SessionHostOptions {
 	allowBash: boolean;
 	/** Gespeicherte Provider je Konto — unabhängig von der Anmeldung. */
 	providers: ProviderStore;
+	/** Thread-Verlauf je Konto (Fortsetzen über Pi-Session-Dateien). */
+	threads: ThreadStore;
+	/** Verzeichnis der Pro-Konto-Credential-Dateien (native Provider). */
+	credentialsDir: string;
 }
 
 /** Nachrichten Browser → Server. */
@@ -48,7 +57,13 @@ export type ClientMessage =
 	| { type: "byom_activate"; providerId: string }
 	| { type: "set_thinking"; level: string }
 	| { type: "file_upload"; name: string; content: string }
-	| { type: "new_thread" };
+	| { type: "new_thread" }
+	| { type: "thread_list" }
+	| { type: "thread_open"; threadId: string }
+	| { type: "thread_delete"; threadId: string }
+	| { type: "provider_status" }
+	| { type: "provider_login"; art: "api" | "oauth"; providerId: string; apiKey?: string }
+	| { type: "provider_logout"; providerId: string };
 
 /** Obergrenze für Datei-Anhänge (Base64-Transport über WebSocket). */
 const ANHANG_MAX_BYTES = 10 * 1024 * 1024;
@@ -56,6 +71,7 @@ const ANHANG_MAX_BYTES = 10 * 1024 * 1024;
 /** Textanteil einer Assistenten-Nachricht (Denkblöcke und Werkzeugaufrufe ausgeblendet). */
 function extractText(message: unknown): string {
 	const content = (message as { content?: unknown })?.content;
+	if (typeof content === "string") return content;
 	if (!Array.isArray(content)) return "";
 	return content
 		.filter((block): block is { type: "text"; text: string } => block?.type === "text")
@@ -80,16 +96,51 @@ export class SessionHost {
 		this.options = options;
 	}
 
-	async open(send: (message: ServerMessage | Record<string, unknown>) => void, user?: WebUser): Promise<HostedSession> {
+	async open(send: (message: ServerMessage | Record<string, unknown>) => void, user?: WebUser, threadId?: string): Promise<HostedSession> {
 		// Angemeldete Nutzer bekommen einen dauerhaften Arbeitsbereich, anonyme
-		// Verbindungen (Localhost-Betrieb ohne OAuth) einen Wegwerf-Bereich.
+		// Verbindungen (Localhost-Betrieb ohne Konto) einen Wegwerf-Bereich.
 		const bereich = user
 			? `nutzer-${user.id.replace(/[^a-zA-Z0-9_-]/g, "")}`
 			: `session-${new Date().toISOString().slice(0, 10)}-${randomInt(100000, 999999)}`;
 		const workspace = join(this.options.workspacesDir, bereich);
 		await mkdir(workspace, { recursive: true });
 
+		const kontoId = kontoIdVon(user);
 		const bridge = new WebUiBridge(send);
+
+		// Pro Konto ein eigener Credential-Store — so merkt sich das Konto seine
+		// Provider-Anmeldungen (API-Keys und OAuth-Tokens), ohne dass sich Konten
+		// die globale auth.json teilen. Anonym: rein im Arbeitsspeicher.
+		const credentials = new KontoCredentialStore(
+			user ? credentialDateiFuer(this.options.credentialsDir, kontoId) : null,
+		);
+		const modelRuntime = await ModelRuntime.create({
+			credentials: credentials as never,
+			modelsPath: join(this.options.agentDir, "models.json"),
+		});
+
+		// Thread fortsetzen? Session-Datei aus dem Index über SessionManager.open
+		// wiederherstellen — wie session/load im IDE-Adapter.
+		let threadEintrag: ThreadEintrag | undefined;
+		let sessionManager: SessionManager | undefined;
+		if (user && threadId) {
+			threadEintrag = await this.options.threads.hole(kontoId, threadId);
+			if (threadEintrag && existsSync(threadEintrag.sessionDatei)) {
+				try {
+					sessionManager = SessionManager.open(threadEintrag.sessionDatei, undefined, workspace);
+				} catch (error) {
+					threadEintrag = undefined;
+					send({
+						type: "notify",
+						level: "warning",
+						message: `Thread konnte nicht wiederhergestellt werden (${error instanceof Error ? error.message : String(error)}) — neuer Thread gestartet.`,
+					});
+				}
+			} else {
+				threadEintrag = undefined;
+				send({ type: "notify", level: "warning", message: "Dieser Thread ist nicht mehr verfügbar — neuer Thread gestartet." });
+			}
+		}
 
 		const loader = new DefaultResourceLoader({
 			cwd: workspace,
@@ -102,6 +153,8 @@ export class SessionHost {
 			cwd: workspace,
 			agentDir: this.options.agentDir,
 			resourceLoader: loader,
+			sessionManager,
+			modelRuntime,
 		});
 
 		await session.bindExtensions({
@@ -112,7 +165,7 @@ export class SessionHost {
 			},
 		});
 
-		return new HostedSession(session, bridge, workspace, send, this.options.providers, kontoIdVon(user), modelFallbackMessage, user);
+		return new HostedSession(session, bridge, workspace, send, this.options, kontoId, modelFallbackMessage, user, threadEintrag);
 	}
 }
 
@@ -124,7 +177,12 @@ export class HostedSession {
 	readonly workspace: string;
 	readonly user?: WebUser;
 	readonly kontoId: string;
+	private readonly options: SessionHostOptions;
 	private readonly providers: ProviderStore;
+	/** Zugehöriger Thread im Index (nur mit Konto). */
+	private threadId: string | undefined;
+	private threadErstellt: number;
+	private threadTitel = "";
 	/** Drossel für Verbindungstests (BYOM): Zeitstempel der letzten Tests. */
 	private byomTests: number[] = [];
 
@@ -133,10 +191,11 @@ export class HostedSession {
 		bridge: WebUiBridge,
 		workspace: string,
 		send: (message: ServerMessage | Record<string, unknown>) => void,
-		providers: ProviderStore,
+		options: SessionHostOptions,
 		kontoId: string,
 		modelFallbackMessage?: string,
 		user?: WebUser,
+		threadEintrag?: ThreadEintrag,
 	) {
 		this.session = session;
 		this.workspace = workspace;
@@ -144,10 +203,23 @@ export class HostedSession {
 		this.kontoId = kontoId;
 		this.bridge = bridge;
 		this.send = send;
-		this.providers = providers;
+		this.options = options;
+		this.providers = options.providers;
+		this.threadId = threadEintrag?.id;
+		this.threadErstellt = threadEintrag?.erstellt ?? Date.now();
+		this.threadTitel = threadEintrag?.titel ?? "";
 		this.unsubscribe = session.subscribe((event) => this.forwardEvent(event));
 
-		send({ type: "ready", workspace, model: session.model?.name ?? null, user: this.user?.login ?? null });
+		send({
+			type: "ready",
+			workspace,
+			model: session.model?.name ?? null,
+			user: this.user?.login ?? null,
+			email: this.user?.email ?? null,
+			threadId: this.threadId ?? null,
+		});
+		// Fortgesetzter Thread: bisherigen Verlauf an die UI schicken.
+		if (threadEintrag) this.sendeVerlauf();
 		this.sendeZustand();
 		if (!session.model) {
 			// Noch kein Modell: Gespeicherten Provider des Kontos automatisch
@@ -220,8 +292,25 @@ export class HostedSession {
 			case "file_upload":
 				await this.fileUpload(message.name, message.content);
 				break;
-			// "new_thread" behandelt der Server-Einstieg selbst (Session-Neuaufbau).
+			case "thread_list":
+				await this.threadListe();
+				break;
+			case "thread_delete":
+				await this.threadLoeschen(message.threadId);
+				break;
+			case "provider_status":
+				await this.providerStatus();
+				break;
+			case "provider_login":
+				await this.providerLogin(message.art, message.providerId, message.apiKey);
+				break;
+			case "provider_logout":
+				await this.providerLogout(message.providerId);
+				break;
+			// "new_thread" und "thread_open" behandelt der Server-Einstieg selbst
+			// (Session-Neuaufbau auf derselben Verbindung).
 			case "new_thread":
+			case "thread_open":
 				break;
 		}
 	}
@@ -368,6 +457,7 @@ export class HostedSession {
 				baseUrl: p.baseUrl,
 				modelId: p.modelId,
 				hatKey: p.apiKey.length > 0,
+				art: p.art ?? "custom",
 			})),
 		});
 	}
@@ -380,6 +470,167 @@ export class HostedSession {
 			message: geloescht ? "Provider entfernt." : "Dieser Provider war nicht gespeichert.",
 		});
 		await this.byomList();
+	}
+
+	/* --- Thread-Verlauf (pro Konto) ---------------------------------------- */
+
+	/** Bisheriges Gespräch aus den Session-Nachrichten — Anzeige beim Fortsetzen. */
+	private sendeVerlauf(): void {
+		const nachrichten: Array<{ rolle: "nutzer" | "agent"; text: string }> = [];
+		for (const message of this.session.messages) {
+			const rolle = (message as { role?: string }).role;
+			if (rolle !== "user" && rolle !== "assistant") continue;
+			const text = extractText(message).trim();
+			if (!text) continue;
+			nachrichten.push({ rolle: rolle === "user" ? "nutzer" : "agent", text });
+		}
+		this.send({ type: "thread_history", nachrichten });
+	}
+
+	/** Nach jedem Agenten-Zug: Thread-Eintrag im Index anlegen/aktualisieren. */
+	private async threadSichern(): Promise<void> {
+		if (!this.user) return; // Anonym: kein Verlauf.
+		const sessionDatei = this.session.sessionFile;
+		if (!sessionDatei) return;
+		if (!this.threadId) this.threadId = randomUUID();
+		if (!this.threadTitel) {
+			const erste = this.session.messages.find((m) => (m as { role?: string }).role === "user");
+			if (erste) this.threadTitel = extractText(erste).trim().replace(/\s+/g, " ").slice(0, 60);
+		}
+		try {
+			await this.options.threads.sichere(this.kontoId, {
+				id: this.threadId,
+				titel: this.threadTitel || "Neuer Thread",
+				erstellt: this.threadErstellt,
+				aktualisiert: Date.now(),
+				sessionDatei,
+			});
+		} catch {
+			// Ein Index-Fehler darf das Gespräch nicht abreißen lassen.
+		}
+	}
+
+	private async threadListe(): Promise<void> {
+		if (!this.user) {
+			this.send({ type: "threads", threads: [] });
+			this.send({ type: "notify", level: "info", message: "Der Thread-Verlauf ist nur mit einem Konto verfügbar." });
+			return;
+		}
+		const liste = await this.options.threads.liste(this.kontoId);
+		this.send({
+			type: "threads",
+			threads: liste.map((eintrag) => ({
+				id: eintrag.id,
+				titel: eintrag.titel,
+				erstellt: eintrag.erstellt,
+				aktualisiert: eintrag.aktualisiert,
+				aktiv: eintrag.id === this.threadId,
+			})),
+		});
+	}
+
+	private async threadLoeschen(threadId: string): Promise<void> {
+		const entfernt = await this.options.threads.loesche(this.kontoId, threadId);
+		this.send({
+			type: "notify",
+			level: entfernt ? "info" : "warning",
+			message: entfernt ? "Thread gelöscht." : "Dieser Thread war nicht gespeichert.",
+		});
+		await this.threadListe();
+	}
+
+	/* --- Native Provider-Anmeldung (drei Wege wie in der IDE) ------------ */
+
+	/** Auth-Fähigkeiten eines Pi-Providers defensiv ablesen. */
+	private providerFaehigkeiten(provider: unknown): { apiKey: boolean; oauth: boolean } {
+		const auth = (provider as { auth?: Record<string, unknown> }).auth ?? {};
+		return { apiKey: Boolean(auth.apiKey), oauth: Boolean(auth.oauth) };
+	}
+
+	private async providerStatus(): Promise<void> {
+		const providers = this.session.modelRuntime.getProviders().map((provider) => {
+			const faehig = this.providerFaehigkeiten(provider);
+			let angemeldet = false;
+			try {
+				angemeldet = this.session.modelRuntime.getProviderAuthStatus(provider.id).configured;
+			} catch {
+				// Status unbekannt — als nicht angemeldet zählen.
+			}
+			return { id: provider.id, name: provider.name, apiKey: faehig.apiKey, oauth: faehig.oauth, angemeldet };
+		});
+		this.send({ type: "provider_status", providers });
+	}
+
+	private async providerLogin(art: "api" | "oauth", providerId: string, apiKey?: string): Promise<void> {
+		const provider = this.session.modelRuntime.getProvider(providerId);
+		if (!provider) {
+			this.send({ type: "notify", level: "error", message: `Provider „${providerId}“ ist nicht bekannt.` });
+			return;
+		}
+		const faehig = this.providerFaehigkeiten(provider);
+		if ((art === "api" && !faehig.apiKey) || (art === "oauth" && !faehig.oauth)) {
+			this.send({ type: "notify", level: "error", message: `${provider.name} unterstützt diesen Anmeldeweg nicht.` });
+			return;
+		}
+
+		const interaction = {
+			prompt: async (prompt: { type: string; message: string; placeholder?: string; options?: readonly { id: string }[] }) => {
+				// API-Key-Anmeldung mit mitgegebenem Key: Rückfrage direkt beantworten.
+				if (art === "api" && apiKey && (prompt.type === "secret" || prompt.type === "text")) return apiKey;
+				if (prompt.type === "select" && prompt.options?.length) return prompt.options[0].id;
+				const antwort = await this.bridge.ui.input(prompt.message, prompt.placeholder);
+				return antwort ?? "";
+			},
+			notify: (ereignis: Record<string, unknown>) => {
+				this.send({ type: "provider_auth_event", providerId, event: ereignis });
+			},
+		};
+
+		try {
+			await this.session.modelRuntime.login(providerId, art === "api" ? "api_key" : "oauth", interaction as never);
+			this.send({ type: "notify", level: "info", message: `${provider.name} ist angemeldet.` });
+			await this.modellDesProvidersAktivieren(providerId);
+			await this.providerStatus();
+		} catch (error) {
+			this.send({
+				type: "notify",
+				level: "error",
+				message: `Anmeldung nicht abgeschlossen: ${error instanceof Error ? error.message : String(error)}`,
+			});
+		}
+	}
+
+	private async providerLogout(providerId: string): Promise<void> {
+		try {
+			await this.session.modelRuntime.logout(providerId);
+			this.send({ type: "notify", level: "info", message: "Provider abgemeldet." });
+		} catch (error) {
+			this.send({
+				type: "notify",
+				level: "error",
+				message: `Abmeldung fehlgeschlagen: ${error instanceof Error ? error.message : String(error)}`,
+			});
+		}
+		await this.providerStatus();
+	}
+
+	/** Das erste verfügbare Modell des Providers aktiv setzen (wie in der IDE). */
+	private async modellDesProvidersAktivieren(providerId: string): Promise<void> {
+		const aktuell = this.session.model as unknown as { provider?: string } | undefined;
+		if (aktuell?.provider === providerId) return;
+		const modelle = await this.session.modelRuntime.getAvailable(providerId).catch(() => [] as const);
+		const ziel = modelle[0];
+		if (!ziel) {
+			this.send({
+				type: "notify",
+				level: "warning",
+				message: `Für ${providerId} sind keine Modelle im Katalog — Modell bitte manuell wählen.`,
+			});
+			return;
+		}
+		await this.session.setModel(ziel);
+		this.send({ type: "model_changed", model: this.session.model?.name ?? ziel.id });
+		this.sendeZustand();
 	}
 
 	/** Gespeicherten Provider auf der Session aktivieren. */
@@ -426,6 +677,7 @@ export class HostedSession {
 				break;
 			case "agent_end":
 				this.send({ type: "working", on: false });
+				void this.threadSichern();
 				this.sendeZustand();
 				break;
 			case "message_start":
@@ -476,5 +728,7 @@ export function defaultSessionHostOptions(): SessionHostOptions {
 		workspacesDir: join(home, "web-workspaces"),
 		allowBash: process.env.SYNTAX_BOT_WEB_BASH === "1",
 		providers: new ProviderStore(join(home, "web-providers.json")),
+		threads: new ThreadStore(join(home, "web-threads.json")),
+		credentialsDir: join(home, "web-credentials"),
 	};
 }

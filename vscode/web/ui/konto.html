@@ -19,16 +19,53 @@
 	<main class="konto">
 		<h2 class="konto-titel">Konto und Modell-Anbieter</h2>
 		<p class="konto-hinweis">
-			Deine Anmeldung und deine Modell-Anbieter sind unabhängig voneinander:
-			Du kannst Provider anlegen, wechseln und löschen, wie du willst —
-			auch ganz ohne Anmeldung. Die Einstellungen bleiben auf diesem Server
-			gespeichert und überleben einen Neustart.
+			Mit einem Konto merkt sich Syntax Bot deine Modell-Anbieter —
+			auch über einen Neustart hinaus. Ohne Konto gilt alles nur für
+			diese Verbindung.
 		</p>
 
+		<section class="konto-abschnitt" aria-labelledby="konto-info-titel">
+			<h3 id="konto-info-titel">Dein Konto</h3>
+			<p id="konto-info" class="einstellungen-hinweis">
+				Ohne Konto unterwegs — <a href="/">anmelden oder registrieren</a>,
+				um Anbieter und Verlauf zu behalten.
+			</p>
+			<div class="konto-knoepfe" id="konto-knoepfe" hidden>
+				<a class="knopf knopf--sekundaer" href="/auth/logout">Abmelden</a>
+			</div>
+		</section>
+
+		<section class="konto-abschnitt" aria-labelledby="provider-api-titel">
+			<h3 id="provider-api-titel">1 — API-Key (Anthropic, OpenAI, …)</h3>
+			<div class="einstellungen-zeile">
+				<label for="api-provider">Anbieter</label>
+				<select id="api-provider" class="einstellungen-liste" size="1" aria-label="Anbieter für API-Key"></select>
+			</div>
+			<div class="einstellungen-zeile">
+				<label for="api-schluessel">API-Key</label>
+				<input id="api-schluessel" type="password" autocomplete="off" placeholder="sk-…">
+			</div>
+			<div class="konto-knoepfe">
+				<button id="api-verbinden" type="button" class="knopf knopf--primaer">Mit API-Key anmelden</button>
+			</div>
+		</section>
+
+		<section class="konto-abschnitt" aria-labelledby="provider-browser-titel">
+			<h3 id="provider-browser-titel">2 — Anmeldung im Browser (Claude Pro/Max, ChatGPT-Plus, …)</h3>
+			<div class="einstellungen-zeile">
+				<label for="browser-provider">Anbieter</label>
+				<select id="browser-provider" class="einstellungen-liste" size="1" aria-label="Anbieter für Browser-Anmeldung"></select>
+			</div>
+			<div class="konto-knoepfe">
+				<button id="browser-starten" type="button" class="knopf knopf--primaer">Browser-Anmeldung starten</button>
+			</div>
+			<p id="browser-hinweis" class="einstellungen-hinweis" hidden></p>
+		</section>
+
 		<section class="konto-abschnitt" aria-labelledby="provider-formular-titel">
-			<h3 id="provider-formular-titel">Neuen Anbieter verbinden</h3>
+			<h3 id="provider-formular-titel">3 — Eigener Endpunkt (Ollama, LM Studio, llama.cpp …)</h3>
 			<p class="einstellungen-hinweis">
-				OpenAI-kompatibler Endpunkt — z.&nbsp;B. Ollama, LM Studio oder llama.cpp.
+				OpenAI-kompatibler Endpunkt — wird pro Konto gespeichert.
 			</p>
 			<div class="einstellungen-zeile">
 				<label for="byom-endpunkt">Endpunkt</label>
@@ -50,7 +87,7 @@
 		</section>
 
 		<section class="konto-abschnitt" aria-labelledby="provider-liste-titel">
-			<h3 id="provider-liste-titel">Gespeicherte Anbieter</h3>
+			<h3 id="provider-liste-titel">Angemeldete und gespeicherte Anbieter</h3>
 			<ul id="provider-liste" class="provider-liste">
 				<li class="provider-leer">Noch keine Anbieter gespeichert.</li>
 			</ul>

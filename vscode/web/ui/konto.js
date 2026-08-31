@@ -1,16 +1,25 @@
 /**
  * Syntax Bot — Konto-Seite (Browser-Logik).
  *
- * Verwaltet die gespeicherten Modell-Anbieter über dieselbe WebSocket-
- * Verbindung wie der Chat. Alle Inhalte kommen ausschließlich über
- * textContent ins DOM (XSS-Sicherheit).
+ * Verwaltet das Konto und alle drei Anmeldewege für Modell-Anbieter über
+ * dieselbe WebSocket-Verbindung wie der Chat:
+ *   1 — API-Key (native Provider wie Anthropic, OpenAI, …)
+ *   2 — Anmeldung im Browser (OAuth/Subscription, Link erscheint hier)
+ *   3 — eigener OpenAI-kompatibler Endpunkt (BYOM)
+ * Alle Inhalte kommen ausschließlich über textContent ins DOM (XSS-Sicherheit).
  */
 
 "use strict";
 
 const verbindung = document.getElementById("verbindung");
 const nutzerName = document.getElementById("nutzer-name");
+const kontoInfo = document.getElementById("konto-info");
+const kontoKnoepfe = document.getElementById("konto-knoepfe");
 const meldungen = document.getElementById("meldungen");
+const apiProvider = document.getElementById("api-provider");
+const apiSchluessel = document.getElementById("api-schluessel");
+const browserProvider = document.getElementById("browser-provider");
+const browserHinweis = document.getElementById("browser-hinweis");
 const byomEndpunkt = document.getElementById("byom-endpunkt");
 const byomSchluessel = document.getElementById("byom-schluessel");
 const byomModell = document.getElementById("byom-modell");
@@ -19,6 +28,8 @@ const providerListe = document.getElementById("provider-liste");
 
 let socket = null;
 let aktiveProviderId = null;
+let nativeProvider = [];   // aus provider_status
+let gespeicherteProvider = []; // aus providers (BYOM/custom)
 
 function elementErstellen(tag, klasse, text) {
 	const el = document.createElement(tag);
@@ -41,24 +52,64 @@ function meldungHinzufuegen(level, text) {
 	while (meldungen.children.length > 5) meldungen.lastChild.remove();
 }
 
-/* --- Gespeicherte Anbieter -------------------------------------------- */
+/* --- Konto-Info ---------------------------------------------------------- */
 
-function providerListeRendern(provider) {
-	providerListe.replaceChildren();
-	if (!Array.isArray(provider) || provider.length === 0) {
-		providerListe.appendChild(elementErstellen("li", "provider-leer", "Noch keine Anbieter gespeichert."));
+function kontoInfoAnzeigen(user, email) {
+	if (!user) return; // Ohne Konto bleibt der Hinweistext stehen.
+	kontoInfo.textContent = `Angemeldet als ${user}${email ? ` (${email})` : ""}.`;
+	nutzerName.textContent = user;
+	nutzerName.hidden = false;
+	kontoKnoepfe.hidden = false;
+}
+
+/* --- Provider-Auswahllisten --------------------------------------------- */
+
+function auswahlFuellen(select, provider) {
+	select.replaceChildren();
+	if (provider.length === 0) {
+		select.appendChild(elementErstellen("option", "", "Keine Anbieter verfügbar"));
+		select.disabled = true;
 		return;
 	}
+	select.disabled = false;
 	for (const p of provider) {
-		const eintrag = elementErstellen("li", "provider-eintrag");
+		const option = document.createElement("option");
+		option.value = p.id;
+		option.textContent = p.name;
+		select.appendChild(option);
+	}
+}
 
-		const info = elementErstellen("div", "provider-info");
-		const name = elementErstellen("strong", "", p.displayName);
-		const zeile = elementErstellen("span", "provider-zeile",
-			`${p.baseUrl} · Modell: ${p.modelId}${p.hasKey ? " · API-Key hinterlegt" : ""}`);
-		info.append(name, zeile);
+function providerStatusRendern(provider) {
+	nativeProvider = Array.isArray(provider) ? provider : [];
+	auswahlFuellen(apiProvider, nativeProvider.filter((p) => p.apiKey));
+	auswahlFuellen(browserProvider, nativeProvider.filter((p) => p.oauth));
+	providerListeRendern();
+}
 
-		const knoepfe = elementErstellen("div", "provider-knoepfe");
+/* --- Gemeinsame Anbieter-Liste (native + gespeicherte Endpunkte) --------- */
+
+function providerListeRendern() {
+	providerListe.replaceChildren();
+
+	const nativeAngemeldet = nativeProvider.filter((p) => p.angemeldet);
+	for (const p of nativeAngemeldet) {
+		const eintrag = providerZeile(
+			p.name,
+			p.apiKey && p.oauth ? "API-Key und Browser-Anmeldung" : p.oauth ? "Browser-Anmeldung" : "API-Key",
+		);
+		const abmelden = elementErstellen("button", "knopf knopf--klein", "Abmelden");
+		abmelden.type = "button";
+		abmelden.addEventListener("click", () => sendeNachricht({ type: "provider_logout", providerId: p.id }));
+		eintrag.querySelector(".provider-knoepfe").appendChild(abmelden);
+		providerListe.appendChild(eintrag);
+	}
+
+	for (const p of gespeicherteProvider) {
+		const zeile = `${p.baseUrl} · Modell: ${p.modelId}${p.hasKey ? " · API-Key hinterlegt" : ""}`;
+		const eintrag = providerZeile(p.displayName, zeile);
+		const knoepfe = eintrag.querySelector(".provider-knoepfe");
+
 		const aktivieren = elementErstellen("button", "knopf knopf--klein", "Verbinden");
 		aktivieren.type = "button";
 		aktivieren.disabled = p.providerId === aktiveProviderId;
@@ -67,13 +118,62 @@ function providerListeRendern(provider) {
 		loeschen.type = "button";
 		loeschen.addEventListener("click", () => sendeNachricht({ type: "byom_delete", providerId: p.providerId }));
 		knoepfe.append(aktivieren, loeschen);
-
-		eintrag.append(info, knoepfe);
 		providerListe.appendChild(eintrag);
+	}
+
+	if (providerListe.children.length === 0) {
+		providerListe.appendChild(elementErstellen("li", "provider-leer", "Noch keine Anbieter gespeichert."));
 	}
 }
 
-/* --- Formular ----------------------------------------------------------- */
+function providerZeile(name, detail) {
+	const eintrag = elementErstellen("li", "provider-eintrag");
+	const info = elementErstellen("div", "provider-info");
+	info.append(elementErstellen("strong", "", name), elementErstellen("span", "provider-zeile", detail));
+	eintrag.append(info, elementErstellen("div", "provider-knoepfe"));
+	return eintrag;
+}
+
+/* --- Browser-Anmeldung: Links und Codes anzeigen ------------------------- */
+
+function authEreignisZeigen(ereignis) {
+	if (!ereignis || typeof ereignis !== "object") return;
+	browserHinweis.hidden = false;
+	browserHinweis.textContent = "";
+	if (ereignis.type === "auth_url") {
+		browserHinweis.appendChild(document.createTextNode("Bitte diesen Link öffnen und dort anmelden: "));
+		const link = document.createElement("a");
+		link.href = String(ereignis.url ?? "#");
+		link.target = "_blank";
+		link.rel = "noopener";
+		link.textContent = String(ereignis.url ?? "");
+		browserHinweis.appendChild(link);
+	} else if (ereignis.type === "device_code") {
+		browserHinweis.textContent =
+			`Öffne ${ereignis.verificationUri} und gib dort diesen Code ein: ${ereignis.userCode}`;
+	} else {
+		browserHinweis.textContent = String(ereignis.message ?? "");
+	}
+}
+
+/* --- Formulare ----------------------------------------------------------- */
+
+document.getElementById("api-verbinden").addEventListener("click", () => {
+	if (!apiProvider.value) return;
+	sendeNachricht({
+		type: "provider_login",
+		art: "api",
+		providerId: apiProvider.value,
+		apiKey: apiSchluessel.value.trim(),
+	});
+});
+
+document.getElementById("browser-starten").addEventListener("click", () => {
+	if (!browserProvider.value) return;
+	browserHinweis.hidden = false;
+	browserHinweis.textContent = "Browser-Anmeldung wird gestartet …";
+	sendeNachricht({ type: "provider_login", art: "oauth", providerId: browserProvider.value });
+});
 
 document.getElementById("byom-testen").addEventListener("click", () => {
 	sendeNachricht({ type: "byom_test", baseUrl: byomEndpunkt.value.trim(), apiKey: byomSchluessel.value.trim() });
@@ -110,15 +210,28 @@ function zeigeByomModelle(modelle) {
 function verarbeiteNachricht(nachricht) {
 	switch (nachricht.type) {
 		case "ready":
-			if (nachricht.user) {
-				nutzerName.textContent = String(nachricht.user);
-				nutzerName.hidden = false;
-			}
+			kontoInfoAnzeigen(nachricht.user, nachricht.email);
 			sendeNachricht({ type: "byom_list" });
+			sendeNachricht({ type: "provider_status" });
 			break;
 
 		case "providers":
-			providerListeRendern(Array.isArray(nachricht.providers) ? nachricht.providers : []);
+			gespeicherteProvider = Array.isArray(nachricht.providers) ? nachricht.providers : [];
+			providerListeRendern();
+			break;
+
+		case "provider_status":
+			providerStatusRendern(Array.isArray(nachricht.providers) ? nachricht.providers : []);
+			break;
+
+		case "provider_auth_event":
+			authEreignisZeigen(nachricht.event);
+			break;
+
+		case "ui_request":
+			// Rückfragen des Anmeldeflusses (z. B. Key-Eingabe) laufen im Chat —
+			// hier nur kenntlich machen, dass der Server auf Eingabe wartet.
+			meldungHinzufuegen("info", `Rückfrage im Chat: ${nachricht.title}`);
 			break;
 
 		case "byom_models":
@@ -128,11 +241,15 @@ function verarbeiteNachricht(nachricht) {
 		case "model_changed":
 			meldungHinzufuegen("info", `Aktives Modell: ${nachricht.model ?? "unbekannt"}`);
 			sendeNachricht({ type: "byom_list" });
+			sendeNachricht({ type: "provider_status" });
 			break;
 
 		case "notify":
 			meldungHinzufuegen(nachricht.level, nachricht.message);
-			if (nachricht.level !== "error") sendeNachricht({ type: "byom_list" });
+			if (nachricht.level !== "error") {
+				sendeNachricht({ type: "byom_list" });
+				sendeNachricht({ type: "provider_status" });
+			}
 			break;
 	}
 }

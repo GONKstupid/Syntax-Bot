@@ -1,27 +1,30 @@
 /**
- * Tests für OAuth/Session (web/server/auth.ts) und BYOM (web/server/byom.ts).
+ * Tests für Konten/Sessions (web/server/accounts.ts, web/server/auth.ts)
+ * und BYOM (web/server/byom.ts).
  *
- * Geprüft wird die reine Logik ohne Netzwerk gegen GitHub: Cookies,
- * Rate-Limit, Session-Limits und die Konfigurations-Validierung. Der
- * Modell-Abruf läuft gegen einen lokalen Ersatzserver.
+ * Geprüft wird die reine Logik: Registrierung/Login mit scrypt-Hashes,
+ * Cookies, Rate-Limit, Session-Limits und die Konfigurations-Validierung.
+ * Der Modell-Abruf läuft gegen einen lokalen Ersatzserver.
  */
 
 import assert from "node:assert/strict";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { describe, it } from "node:test";
+import { mkdtemp, readFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { AgentSession } from "@earendil-works/pi-coding-agent";
+import { hashPasswort, KontoStore, pruefeHash } from "../vscode/web/server/accounts.ts";
 import {
-	buildLoginUrl,
 	clearSessionCookie,
 	clientIp,
 	darfVerbinden,
-	oauthConfigFromEnv,
 	parseCookieHeader,
 	rateLimitOk,
 	SessionStore,
 	sessionCookie,
 	sessionTokenFromHeader,
-	type AuthConfig,
+	webAuthConfigFromEnv,
 	type WebSession,
 } from "../vscode/web/server/auth.ts";
 import { lookup } from "node:dns/promises";
@@ -32,44 +35,84 @@ import {
 	validateByomConfig,
 } from "../vscode/web/server/byom.ts";
 
-const beispielConfig: AuthConfig = {
-	clientId: "client-id",
-	clientSecret: "geheim",
-	publicUrl: "https://bot.example.de",
-	secureCookie: true,
-	maxSessionsPerUser: 2,
-};
-
-describe("oauthConfigFromEnv", () => {
-	it("liefert null ohne GitHub-Zugangsdaten", () => {
-		assert.equal(oauthConfigFromEnv({}), null);
-		assert.equal(oauthConfigFromEnv({ SYNTAX_BOT_GITHUB_CLIENT_ID: "nur-id" }), null);
+describe("webAuthConfigFromEnv", () => {
+	it("setzt Standardwerte", () => {
+		const config = webAuthConfigFromEnv({});
+		assert.equal(config.secureCookie, false);
+		assert.equal(config.maxSessionsPerUser, 2);
 	});
 
-	it("übernimmt Werte und Standardwerte", () => {
-		const config = oauthConfigFromEnv({
-			SYNTAX_BOT_GITHUB_CLIENT_ID: " id ",
-			SYNTAX_BOT_GITHUB_CLIENT_SECRET: "secret",
-			SYNTAX_BOT_PUBLIC_URL: "https://x.example/",
-			SYNTAX_BOT_SECURE: "1",
-			SYNTAX_BOT_MAX_SESSIONS: "4",
-		});
-		assert.ok(config);
-		assert.equal(config.clientId, "id");
-		assert.equal(config.publicUrl, "https://x.example");
+	it("übernimmt Werte und fällt bei Unsinn auf den Standard zurück", () => {
+		const config = webAuthConfigFromEnv({ SYNTAX_BOT_SECURE: "1", SYNTAX_BOT_MAX_SESSIONS: "4" });
 		assert.equal(config.secureCookie, true);
 		assert.equal(config.maxSessionsPerUser, 4);
+		assert.equal(webAuthConfigFromEnv({ SYNTAX_BOT_MAX_SESSIONS: "unsinn" }).maxSessionsPerUser, 2);
 	});
 });
 
-describe("buildLoginUrl", () => {
-	it("enthält Client, Weiterleitung, Scope und State", () => {
-		const url = new URL(buildLoginUrl(beispielConfig, "zustand-123"));
-		assert.equal(url.origin + url.pathname, "https://github.com/login/oauth/authorize");
-		assert.equal(url.searchParams.get("client_id"), "client-id");
-		assert.equal(url.searchParams.get("redirect_uri"), "https://bot.example.de/auth/callback");
-		assert.equal(url.searchParams.get("scope"), "read:user");
-		assert.equal(url.searchParams.get("state"), "zustand-123");
+describe("KontoStore (Registrierung und Anmeldung)", () => {
+	async function neuerStore(): Promise<KontoStore> {
+		const verzeichnis = await mkdtemp(join(tmpdir(), "syntax-konten-"));
+		return new KontoStore(join(verzeichnis, "web-accounts.json"));
+	}
+
+	it("legt ein Konto an und meldet damit an", async () => {
+		const store = await neuerStore();
+		const konto = await store.registrieren("ada_lovelace", "ada@example.de", "geheimnis1");
+		assert.equal(konto.nutzername, "ada_lovelace");
+		assert.ok(konto.passwortHash.length > 0);
+		assert.notEqual(konto.passwortHash, "geheimnis1");
+
+		// Anmeldung über Nutzername und über E-Mail.
+		assert.equal((await store.anmelden("ada_lovelace", "geheimnis1")).id, konto.id);
+		assert.equal((await store.anmelden("ADA@example.de", "geheimnis1")).id, konto.id);
+	});
+
+	it("lehnt falsche Passwörter und unbekannte Kennungen gleich ab", async () => {
+		const store = await neuerStore();
+		await store.registrieren("grace", "grace@example.de", "geheimnis1");
+		await assert.rejects(store.anmelden("grace", "falsch123"), /falsch/);
+		await assert.rejects(store.anmelden("unbekannt", "geheimnis1"), /falsch/);
+	});
+
+	it("erkennt doppelte Nutzernamen und E-Mails (auch anders geschrieben)", async () => {
+		const store = await neuerStore();
+		await store.registrieren("hopper", "hopper@example.de", "geheimnis1");
+		await assert.rejects(store.registrieren("HOPPER", "neu@example.de", "geheimnis1"), /vergeben/);
+		await assert.rejects(store.registrieren("anders", "Hopper@Example.de", "geheimnis1"), /registriert/);
+	});
+
+	it("prüft die Angaben vor dem Anlegen", async () => {
+		const store = await neuerStore();
+		await assert.rejects(store.registrieren("ab", "x@example.de", "geheimnis1"), /Nutzername/);
+		await assert.rejects(store.registrieren("gültig!", "x@example.de", "geheimnis1"), /Nutzername/);
+		await assert.rejects(store.registrieren("hopper", "keine-mail", "geheimnis1"), /E-Mail/);
+		await assert.rejects(store.registrieren("hopper", "x@example.de", "kurz"), /Passwort/);
+	});
+
+	it("persistiert Konten und findet sie nach Neuladen", async () => {
+		const verzeichnis = await mkdtemp(join(tmpdir(), "syntax-konten-"));
+		const datei = join(verzeichnis, "web-accounts.json");
+		const konto = await new KontoStore(datei).registrieren("turing", "t@example.de", "geheimnis1");
+		const neuGeladen = new KontoStore(datei);
+		assert.equal((await neuGeladen.anmelden("turing", "geheimnis1")).id, konto.id);
+		assert.equal((await neuGeladen.hole(konto.id))?.email, "t@example.de");
+		// Die Datei enthält keine Klartext-Passwörter.
+		assert.ok(!(await readFile(datei, "utf8")).includes("geheimnis1"));
+	});
+});
+
+describe("scrypt-Hash und timing-sicherer Vergleich", () => {
+	it("hashPasswort ist stabil pro Salt und pruefeHash vergleicht korrekt", async () => {
+		const eins = await hashPasswort("geheimnis1", "salz-eins");
+		const nochmal = await hashPasswort("geheimnis1", "salz-eins");
+		const anderesSalz = await hashPasswort("geheimnis1", "salz-zwei");
+		assert.equal(eins, nochmal);
+		assert.notEqual(eins, anderesSalz);
+		assert.equal(pruefeHash(eins, nochmal), true);
+		assert.equal(pruefeHash(eins, anderesSalz), false);
+		// Unterschiedliche Längen dürfen keinen Vergleichsfehler werfen.
+		assert.equal(pruefeHash(eins, "ab"), false);
 	});
 });
 

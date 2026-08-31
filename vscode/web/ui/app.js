@@ -26,6 +26,9 @@ const dialogOverlay = document.getElementById("dialog-overlay");
 const dialogTitel = document.getElementById("dialog-titel");
 const dialogInhalt = document.getElementById("dialog-inhalt");
 const dialogKnoepfe = document.getElementById("dialog-knoepfe");
+const threadsOverlay = document.getElementById("threads-overlay");
+const threadsListe = document.getElementById("threads-liste");
+const threadsSchliessen = document.getElementById("threads-schliessen");
 
 const kontextAnzeige = document.getElementById("kontext-anzeige");
 const modellKnopf = document.getElementById("modell-knopf");
@@ -42,6 +45,7 @@ let denkBlock = null;
 let denkInhalt = null;
 let dialogOffen = false;
 let onboardingOffen = false;
+let threadsOffen = false;
 
 /** Fußleisten-Zustand, gespeist aus session_state-/status-Nachrichten. */
 let status = {
@@ -358,6 +362,10 @@ document.addEventListener("keydown", (ereignis) => {
 		onboardingSchliessen();
 		return;
 	}
+	if (threadsOffen) {
+		threadsSchliessenFunktion();
+		return;
+	}
 	if (!menue.hidden) {
 		menueVerbergen();
 		return;
@@ -567,6 +575,73 @@ function neuerThread() {
 
 neuKnopf.addEventListener("click", neuerThread);
 
+/* --- Threads-Overlay: gespeicherte Gespräche öffnen und fortsetzen ------ */
+
+function threadsOeffnen() {
+	sendeNachricht({ type: "thread_list" });
+	threadsListe.replaceChildren(elementErstellen("p", "threads-leer", "Lade Threads …"));
+	threadsOverlay.hidden = false;
+	threadsOffen = true;
+	threadsSchliessen.focus();
+}
+
+function threadsSchliessenFunktion() {
+	threadsOverlay.hidden = true;
+	threadsOffen = false;
+	eingabe.focus();
+}
+
+threadsSchliessen.addEventListener("click", threadsSchliessenFunktion);
+threadsOverlay.addEventListener("click", (ereignis) => {
+	if (ereignis.target === threadsOverlay) threadsSchliessenFunktion();
+});
+
+/** Einen alten Thread laden — Verlauf wird geräumt, der Server setzt fort. */
+function threadOeffnen(threadId) {
+	sendeNachricht({ type: "thread_open", threadId });
+	threadsSchliessenFunktion();
+	verlauf.replaceChildren(elementErstellen("p", "threads-leer", "Thread wird geladen …"));
+	aktiveAgentNachricht = null;
+	denkBlock = null;
+	denkInhalt = null;
+	arbeitsanzeige.hidden = true;
+	aktuellerModus = null;
+	fussLeisteRendern();
+}
+
+function threadLoeschen(threadId) {
+	sendeNachricht({ type: "thread_delete", threadId });
+	sendeNachricht({ type: "thread_list" });
+}
+
+function threadsRendern(threads) {
+	threadsListe.replaceChildren();
+	if (!Array.isArray(threads) || threads.length === 0) {
+		threadsListe.appendChild(elementErstellen("p", "threads-leer",
+			"Noch keine Threads. Unterhaltungen werden nach dem ersten Agenten-Zug gespeichert."));
+		return;
+	}
+	for (const eintrag of threads) {
+		const zeile = elementErstellen("div", `thread-eintrag${eintrag.aktiv ? " thread-eintrag--aktiv" : ""}`);
+		const info = document.createElement("button");
+		info.type = "button";
+		info.className = "thread-info";
+		info.appendChild(elementErstellen("span", "thread-titel", eintrag.titel ?? "Ohne Titel"));
+		const datum = new Date(eintrag.aktualisiert ?? eintrag.erstellt ?? Date.now());
+		info.appendChild(elementErstellen("span", "thread-datum",
+			`${eintrag.aktiv ? "● aktiv · " : ""}${datum.toLocaleDateString("de-DE")} ${datum.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}`));
+		info.addEventListener("click", () => threadOeffnen(eintrag.id));
+		zeile.appendChild(info);
+
+		const loeschen = elementErstellen("button", "knopf knopf--klein knopf--sekundaer", "Löschen");
+		loeschen.type = "button";
+		loeschen.setAttribute("aria-label", `Thread „${eintrag.titel ?? "Ohne Titel"}“ löschen`);
+		loeschen.addEventListener("click", () => threadLoeschen(eintrag.id));
+		zeile.appendChild(loeschen);
+		threadsListe.appendChild(zeile);
+	}
+}
+
 /** Thread als Markdown exportieren — aus dem sichtbaren Verlauf aufgebaut. */
 function exportiereThread() {
 	const zeilen = [];
@@ -593,6 +668,7 @@ function exportiereThread() {
 menueKnopf.addEventListener("click", () => {
 	menueZeigen(menueKnopf, [
 		{ text: "Neuer Thread", beschreibung: "+", aktion: neuerThread },
+		{ text: "Threads", beschreibung: "Verlauf", aktion: threadsOeffnen },
 		{ text: "Thread als Markdown exportieren", beschreibung: ".md", aktion: exportiereThread },
 		{ text: "Hilfe", beschreibung: "Onboarding", aktion: onboardingOeffnen },
 		{ text: "Anmelden", beschreibung: "Startseite", aktion: () => { location.href = "/"; } },
@@ -810,6 +886,36 @@ function verarbeiteNachricht(nachricht) {
 			sendeNachricht({ type: "byom_list" });
 			fussLeisteRendern();
 			break;
+
+		case "threads":
+			threadsRendern(Array.isArray(nachricht.threads) ? nachricht.threads : []);
+			break;
+
+		case "thread_history":
+			// Fortgesetzter Thread: frühere Nachrichten zuerst anzeigen.
+			verlauf.replaceChildren();
+			for (const nachrichtVon of Array.isArray(nachricht.nachrichten) ? nachricht.nachrichten : []) {
+				if (nachrichtVon.rolle === "nutzer") nachrichtHinzufuegen("nachricht--nutzer", nachrichtVon.text ?? "", "Du");
+				else nachrichtHinzufuegen("nachricht--agent", nachrichtVon.text ?? "", "Syntax Bot");
+			}
+			nachScrollen();
+			break;
+
+		case "provider_auth_event": {
+			// Browser-Anmeldung eines Providers: Link/Hinweis in den Chat legen.
+			const ereignis = nachricht.event ?? {};
+			if (ereignis.type === "auth_url" && ereignis.url) {
+				const el = nachrichtHinzufuegen("nachricht--hinweis",
+					`Anmeldung bei „${nachricht.providerId}“: ${ereignis.url} — im Browser öffnen und hier warten.`);
+				el.querySelectorAll("p").forEach((p) => { p.style.userSelect = "all"; });
+			} else if (ereignis.type === "device_code") {
+				nachrichtHinzufuegen("nachricht--hinweis",
+					`Anmeldung bei „${nachricht.providerId}“: Code ${ereignis.code ?? ""} unter ${ereignis.url ?? "der Anbieter-Seite"} eingeben.`);
+			} else if (ereignis.text || ereignis.message) {
+				nachrichtHinzufuegen("nachricht--hinweis", String(ereignis.text ?? ereignis.message));
+			}
+			break;
+		}
 
 		case "session_state":
 			status = {

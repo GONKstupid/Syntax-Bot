@@ -8,10 +8,12 @@
  * eine eigene Pi-Session mit eigenem Arbeitsbereich (siehe session-host.ts).
  *
  * Zwei Betriebsarten:
- *  - Ohne OAuth-Konfiguration: Ein-Nutzer-Betrieb, bindet NUR auf localhost.
- *  - Mit GitHub-OAuth (SYNTAX_BOT_GITHUB_CLIENT_ID/SECRET): Multi-User,
- *    Login-Pflicht, darf auch öffentlich binden. HTTPS terminiert dann ein
- *    Reverse-Proxy (Caddy/nginx); bei HTTPS-Cookies SYNTAX_BOT_SECURE=1.
+ *  - Standard: Binden NUR auf localhost; „Ohne Konto fortfahren" ist möglich
+ *    (Wegwerf-Session ohne Verlauf und ohne gemerkte Provider).
+ *  - Öffentliches Binden verlangt SYNTAX_BOT_PUBLIC_BIND=1 — dann ist ein
+ *    Konto Pflicht. Konten werden lokal angelegt (Nutzername/E-Mail/Passwort,
+ *    siehe accounts.ts); HTTPS terminiert ein Reverse-Proxy (Caddy/nginx),
+ *    bei HTTPS-Cookies SYNTAX_BOT_SECURE=1.
  */
 
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
@@ -19,22 +21,19 @@ import { readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, extname, join, normalize } from "node:path";
-import { randomBytes } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer } from "ws";
+import { KontoStore } from "./accounts.ts";
 import {
-	buildLoginUrl,
 	clearSessionCookie,
 	clientIp,
 	darfVerbinden,
-	exchangeCode,
-	fetchGithubUser,
-	oauthConfigFromEnv,
 	parseCookieHeader,
 	rateLimitOk,
 	sessionCookie,
 	SessionStore,
-	type AuthConfig,
+	webAuthConfigFromEnv,
+	type WebAuthConfig,
 	type WebUser,
 } from "./auth.ts";
 import {
@@ -58,16 +57,14 @@ const MIME_TYPES: Record<string, string> = {
 };
 
 const SESSION_COOKIE_NAME = "syntax-bot-session";
-const STATE_LIFETIME_MS = 10 * 60 * 1000;
+/** Obergrenze für Anmelde-Formulare — mehr braucht niemand. */
+const BODY_MAX_BYTES = 64 * 1024;
 
 /** Ab hier wird die App ausgeliefert — die Startseite »/« ist die Anmeldung. */
 const ROUTEN_DATEI: Record<string, string> = {
 	"/app": "/index.html",
 	"/konto": "/konto.html",
 };
-
-/** Markierungen im login.html für den optionalen GitHub-Anmeldeblock. */
-const OAUTH_BLOCK_MUSTER = /<!-- OAUTH-ANFANG -->[\s\S]*?<!-- OAUTH-ENDE -->\n?/;
 
 /** Mindeststruktur einer ws-Verbindung — das Paket ws liefert selbst keine Typen mit. */
 interface SocketConnection {
@@ -80,15 +77,16 @@ interface SocketConnection {
 }
 
 interface ServerContext {
-	oauth: AuthConfig | null;
+	auth: WebAuthConfig;
+	kontos: KontoStore;
 	sessions: SessionStore;
-	/** Ausstehende OAuth-States (CSRF-Schutz) mit Ablaufzeit. */
-	pendingStates: Map<string, number>;
 	/** Aktive WebSocket-Verbindungen pro Nutzer-ID. */
 	wsCounts: Map<string, number>;
 	/** Rate-Limit-Zähler pro Client-IP. */
 	rateCounter: Map<string, number[]>;
 	trustProxy: boolean;
+	/** Anonyme Nutzung nur, solange der Server ausschließlich lokal bindet. */
+	erlaubeAnonym: boolean;
 }
 
 function parseArgs(argv: string[]): { port: number; host: string } {
@@ -107,7 +105,6 @@ function istLoopback(host: string): boolean {
 }
 
 function userFromRequest(context: ServerContext, request: IncomingMessage): WebUser | undefined {
-	if (!context.oauth) return undefined;
 	const token = parseCookieHeader(request.headers.cookie)[SESSION_COOKIE_NAME];
 	return context.sessions.get(token)?.user;
 }
@@ -122,7 +119,7 @@ async function serveStatic(
 ): Promise<void> {
 	const url = new URL(request.url ?? "/", "http://localhost");
 	let pathname = datei ?? ROUTEN_DATEI[url.pathname] ?? url.pathname;
-	if (pathname === "/") pathname = context.oauth ? "/index.html" : "/login.html";
+	if (pathname === "/") pathname = "/login.html";
 	const filePath = normalize(join(uiDir, pathname));
 
 	if (!filePath.startsWith(uiDir) || !existsSync(filePath)) {
@@ -131,20 +128,7 @@ async function serveStatic(
 		return;
 	}
 
-	let inhalt: Buffer = await readFile(filePath);
-
-	// Anmeldeseite: GitHub-Block nur zeigen, wenn OAuth konfiguriert ist;
-	// sonst bleibt nur der Weg »Ohne Provider fortfahren«.
-	if (pathname === "/login.html") {
-		let html = inhalt.toString("utf8");
-		if (context.oauth) {
-			html = html.replace("<!-- OAUTH-ANFANG -->", "").replace("<!-- OAUTH-ENDE -->", "");
-		} else {
-			html = html.replace(OAUTH_BLOCK_MUSTER, "");
-		}
-		inhalt = Buffer.from(html, "utf8");
-	}
-
+	const inhalt = await readFile(filePath);
 	response.writeHead(200, {
 		"content-type": MIME_TYPES[extname(filePath)] ?? "application/octet-stream",
 		"cache-control": "no-store",
@@ -157,55 +141,103 @@ function antworteText(response: ServerResponse, status: number, text: string): v
 	response.end(text);
 }
 
-/* --- OAuth-Routen ---------------------------------------------------------- */
-
-function behandleLogin(context: ServerContext, request: IncomingMessage, response: ServerResponse): void {
-	if (!context.oauth) return antworteText(response, 404, "OAuth ist nicht konfiguriert.");
-	const ip = clientIp(request as never, context.trustProxy);
-	if (!rateLimitOk(context.rateCounter, `login:${ip}`, Date.now(), 60000, 20)) {
-		return antworteText(response, 429, "Zu viele Anmeldeversuche — bitte kurz warten.");
-	}
-
-	const state = randomBytes(16).toString("hex");
-	context.pendingStates.set(state, Date.now() + STATE_LIFETIME_MS);
-	response.writeHead(302, { location: buildLoginUrl(context.oauth, state) });
-	response.end();
+function antworteJson(response: ServerResponse, status: number, daten: Record<string, unknown>, extraHeaders: Record<string, string | string[]> = {}): void {
+	response.writeHead(status, { "content-type": "application/json; charset=utf-8", ...extraHeaders });
+	response.end(JSON.stringify(daten));
 }
 
-async function behandleCallback(context: ServerContext, request: IncomingMessage, response: ServerResponse): Promise<void> {
-	const oauth = context.oauth;
-	if (!oauth) return antworteText(response, 404, "OAuth ist nicht konfiguriert.");
+/** Formular- oder JSON-Körper einlesen (kleine Grenze, dann Fehler). */
+function leseKoerper(request: IncomingMessage): Promise<Record<string, string>> {
+	return new Promise((resolve, reject) => {
+		const teile: Buffer[] = [];
+		let groesse = 0;
+		request.on("data", (stueck: Buffer) => {
+			groesse += stueck.length;
+			if (groesse > BODY_MAX_BYTES) {
+				reject(new Error("Die Anfrage ist zu groß."));
+				request.destroy();
+				return;
+			}
+			teile.push(stueck);
+		});
+		request.on("end", () => {
+			const roh = Buffer.concat(teile).toString("utf8");
+			if (!roh) return resolve({});
+			try {
+				const typ = String(request.headers["content-type"] ?? "");
+				if (typ.includes("application/json")) {
+					const daten = JSON.parse(roh) as Record<string, unknown>;
+					const felder: Record<string, string> = {};
+					for (const [name, wert] of Object.entries(daten)) felder[name] = String(wert ?? "");
+					return resolve(felder);
+				}
+				const parameter = new URLSearchParams(roh);
+				const felder: Record<string, string> = {};
+				for (const [name, wert] of parameter) felder[name] = wert;
+				return resolve(felder);
+			} catch {
+				reject(new Error("Der Anfragekörper ist ungültig."));
+			}
+		});
+		request.on("error", () => reject(new Error("Die Anfrage konnte nicht gelesen werden.")));
+	});
+}
 
-	const url = new URL(request.url ?? "/", "http://localhost");
-	const state = url.searchParams.get("state") ?? "";
-	const code = url.searchParams.get("code") ?? "";
+/* --- Konto-Routen ---------------------------------------------------------- */
 
-	const ablauf = context.pendingStates.get(state);
-	context.pendingStates.delete(state);
-	if (!ablauf || ablauf < Date.now() || !code) {
-		return antworteText(response, 400, "Ungültige oder abgelaufene Anmeldung. Bitte erneut versuchen.");
+async function behandleRegistrieren(context: ServerContext, request: IncomingMessage, response: ServerResponse): Promise<void> {
+	const ip = clientIp(request as never, context.trustProxy);
+	if (!rateLimitOk(context.rateCounter, `registrieren:${ip}`, Date.now(), 60000, 10)) {
+		return antworteJson(response, 429, { fehler: "Zu viele Registrierungen — bitte kurz warten." });
+	}
+
+	let felder: Record<string, string>;
+	try {
+		felder = await leseKoerper(request);
+	} catch (error) {
+		return antworteJson(response, 400, { fehler: error instanceof Error ? error.message : String(error) });
 	}
 
 	try {
-		const accessToken = await exchangeCode(oauth, code);
-		const user = await fetchGithubUser(oauth, accessToken);
-		const session = context.sessions.create(user);
-		response.writeHead(302, {
-			location: "/app",
-			"set-cookie": sessionCookie(session, oauth.secureCookie),
-		});
-		response.end();
+		const konto = await context.kontos.registrieren(felder.nutzername ?? "", felder.email ?? "", felder.passwort ?? "");
+		const session = context.sessions.create({ id: konto.id, login: konto.nutzername, email: konto.email });
+		antworteJson(response, 200, { ok: true }, { "set-cookie": sessionCookie(session, context.auth.secureCookie) });
 	} catch (error) {
-		antworteText(response, 502, `Anmeldung fehlgeschlagen: ${error instanceof Error ? error.message : String(error)}`);
+		antworteJson(response, 400, { fehler: error instanceof Error ? error.message : String(error) });
 	}
 }
 
-function behandleLogout(context: ServerContext, request: IncomingMessage, response: ServerResponse): void {
+async function behandleAnmelden(context: ServerContext, request: IncomingMessage, response: ServerResponse): Promise<void> {
+	const ip = clientIp(request as never, context.trustProxy);
+	if (!rateLimitOk(context.rateCounter, `anmelden:${ip}`, Date.now(), 60000, 20)) {
+		return antworteJson(response, 429, { fehler: "Zu viele Anmeldeversuche — bitte kurz warten." });
+	}
+
+	let felder: Record<string, string>;
+	try {
+		felder = await leseKoerper(request);
+	} catch (error) {
+		return antworteJson(response, 400, { fehler: error instanceof Error ? error.message : String(error) });
+	}
+
+	const kennung = (felder.kennung ?? felder.nutzername ?? "").trim();
+	try {
+		const konto = await context.kontos.anmelden(kennung, felder.passwort ?? "");
+		const session = context.sessions.create({ id: konto.id, login: konto.nutzername, email: konto.email });
+		antworteJson(response, 200, { ok: true }, { "set-cookie": sessionCookie(session, context.auth.secureCookie) });
+	} catch (error) {
+		// Gleiche Meldung für unbekanntes Konto und falsches Passwort —
+		// so verrät die Antwort nicht, welche Konten existieren.
+		antworteJson(response, 401, { fehler: error instanceof Error ? error.message : String(error) });
+	}
+}
+
+function behandleAbmelden(context: ServerContext, request: IncomingMessage, response: ServerResponse): void {
 	const token = parseCookieHeader(request.headers.cookie)[SESSION_COOKIE_NAME];
 	if (token) context.sessions.delete(token);
 	response.writeHead(302, {
 		location: "/",
-		"set-cookie": clearSessionCookie(context.oauth?.secureCookie ?? false),
+		"set-cookie": clearSessionCookie(context.auth.secureCookie),
 	});
 	response.end();
 }
@@ -215,7 +247,8 @@ function behandleLogout(context: ServerContext, request: IncomingMessage, respon
 async function main(): Promise<void> {
 	const { port, host } = parseArgs(process.argv.slice(2));
 	const options = defaultSessionHostOptions();
-	const oauth = oauthConfigFromEnv();
+	const auth = webAuthConfigFromEnv();
+	const erlaubeAnonym = istLoopback(host);
 
 	const runtimeDir = join(process.env.SYNTAX_BOT_HOME || join(homedir(), ".syntax-bot"), "runtime");
 	if (!existsSync(runtimeDir)) {
@@ -223,22 +256,23 @@ async function main(): Promise<void> {
 		process.exit(1);
 	}
 
-	if (!istLoopback(host) && !oauth) {
+	if (!erlaubeAnonym && process.env.SYNTAX_BOT_PUBLIC_BIND !== "1") {
 		process.stderr.write(
-			"FEHLER: Öffentliches Binden ist ohne OAuth nicht erlaubt.\n" +
-				"Setze SYNTAX_BOT_GITHUB_CLIENT_ID und SYNTAX_BOT_GITHUB_CLIENT_SECRET\n" +
-				"(sowie SYNTAX_BOT_PUBLIC_URL), oder binde auf 127.0.0.1.\n",
+			"FEHLER: Öffentliches Binden verlangt eine bewusste Entscheidung.\n" +
+				"Setze SYNTAX_BOT_PUBLIC_BIND=1 (Konten mit Nutzername/E-Mail/Passwort\n" +
+				"sind eingebaut), oder binde auf 127.0.0.1.\n",
 		);
 		process.exit(1);
 	}
 
 	const context: ServerContext = {
-		oauth,
+		auth,
+		kontos: new KontoStore(join(process.env.SYNTAX_BOT_HOME || join(homedir(), ".syntax-bot"), "web-accounts.json")),
 		sessions: new SessionStore(),
-		pendingStates: new Map(),
 		wsCounts: new Map(),
 		rateCounter: new Map(),
 		trustProxy: process.env.SYNTAX_BOT_TRUST_PROXY === "1",
+		erlaubeAnonym,
 	};
 	const sessionHost = new SessionHost(options);
 
@@ -246,21 +280,23 @@ async function main(): Promise<void> {
 		const pfad = new URL(request.url ?? "/", "http://localhost").pathname;
 
 		try {
-			if (pfad === "/auth/login") return behandleLogin(context, request, response);
-			if (pfad === "/auth/callback") {
-				return void behandleCallback(context, request, response).catch(() => antworteText(response, 500, "Serverfehler bei der Anmeldung."));
+			if (pfad === "/auth/register" && request.method === "POST") {
+				return void behandleRegistrieren(context, request, response).catch(() => antworteText(response, 500, "Serverfehler bei der Registrierung."));
 			}
-			if (pfad === "/auth/logout") return behandleLogout(context, request, response);
+			if (pfad === "/auth/login" && request.method === "POST") {
+				return void behandleAnmelden(context, request, response).catch(() => antworteText(response, 500, "Serverfehler bei der Anmeldung."));
+			}
+			if (pfad === "/auth/logout") return behandleAbmelden(context, request, response);
 
 			const nutzer = userFromRequest(context, request);
-			// Mit OAuth kommt nur eine gültige Session zur App — statische
-			// Bausteine (CSS, JS, Schriften) braucht aber schon die Anmeldeseite.
+			// Ohne Konto und ohne anonyme Freigabe kommt nur die Anmeldeseite
+			// durch — statische Bausteine (CSS, JS, Schriften) braucht sie selbst.
 			const istStatik = /\.[a-z0-9]+$/i.test(pfad);
-			if (context.oauth && !nutzer && !istStatik) {
+			if (!context.erlaubeAnonym && !nutzer && !istStatik) {
 				return void serveStatic(request, response, context, "/login.html");
 			}
 			// Angemeldet auf der Startseite → direkt zur App.
-			if (pfad === "/" && context.oauth && nutzer) {
+			if (pfad === "/" && nutzer) {
 				response.writeHead(302, { location: "/app" });
 				return response.end();
 			}
@@ -277,12 +313,15 @@ async function main(): Promise<void> {
 			info: { req: IncomingMessage },
 			callback: (result: boolean, code?: number, message?: string) => void,
 		) => {
-			if (!context.oauth) return callback(true);
 			const token = parseCookieHeader(info.req.headers.cookie)[SESSION_COOKIE_NAME];
 			const session = context.sessions.get(token);
-			if (!session) return callback(false, 401, "Nicht angemeldet");
+			if (!session) {
+				// Ohne Konto nur im rein lokalen Betrieb (Wegwerf-Session).
+				if (!context.erlaubeAnonym) return callback(false, 401, "Nicht angemeldet");
+				return callback(true);
+			}
 			const aktive = context.wsCounts.get(session.user.id) ?? 0;
-			if (!darfVerbinden(aktive, context.oauth.maxSessionsPerUser)) {
+			if (!darfVerbinden(aktive, context.auth.maxSessionsPerUser)) {
 				return callback(false, 429, "Zu viele parallele Verbindungen");
 			}
 			callback(true);
@@ -331,6 +370,20 @@ async function main(): Promise<void> {
 				}
 				return;
 			}
+			// Alten Thread öffnen: Session-Datei wiederherstellen (mit Kontext).
+			if (message?.type === "thread_open") {
+				try {
+					await hosted.dispose();
+					hosted = await sessionHost.open(send, user, message.threadId);
+				} catch (error) {
+					send({
+						type: "notify",
+						level: "error",
+						message: `Thread konnte nicht geöffnet werden: ${error instanceof Error ? error.message : String(error)}`,
+					});
+				}
+				return;
+			}
 			await hosted.handleMessage(message);
 		});
 		ws.on("close", () => {
@@ -346,14 +399,11 @@ async function main(): Promise<void> {
 	await new Promise<void>((resolveListen) => server.listen(port, host, resolveListen));
 
 	process.stderr.write(`Syntax Bot Web: http://${host}:${port}\n`);
-	if (oauth) {
-		process.stderr.write(`OAuth aktiv (GitHub), öffentlicher Basis-URL: ${oauth.publicUrl}\n`);
-		if (!oauth.secureCookie) {
+	if (!erlaubeAnonym) {
+		process.stderr.write("Öffentliches Binden aktiv — Anmeldung per Konto ist Pflicht.\n");
+		if (!auth.secureCookie) {
 			process.stderr.write("Hinweis: Für HTTPS-Betrieb SYNTAX_BOT_SECURE=1 setzen (Secure-Cookie).\n");
 		}
-	} else if (!istLoopback(host)) {
-		// Durch die Prüfung oben unerreichbar — zur Absicherung dennoch Warnung.
-		process.stderr.write("WARNUNG: Der Server ist übers Netz erreichbar.\n");
 	}
 }
 

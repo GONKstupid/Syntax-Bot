@@ -737,6 +737,105 @@ code {
 	margin: 0;
 }
 
+/* Anmeldeseite: Umschalter „Anmelden / Registrieren“.
+   Aktiver Reiter: Haarlinie in --accent plus ●-Marke (nie Farbe allein). */
+.anmeldung-umschalter {
+	display: flex;
+	gap: 0.5rem;
+	justify-content: center;
+	margin: 1.25rem 0;
+}
+
+.umschalter {
+	font: inherit;
+	font-size: 16px;
+	font-weight: 700;
+	color: var(--text-muted);
+	background: transparent;
+	border: 1px solid var(--border);
+	border-radius: 4px;
+	padding: 0.4rem 1.2rem;
+	min-height: 44px;
+	cursor: pointer;
+}
+
+.umschalter:hover {
+	background: var(--bg);
+}
+
+.umschalter--aktiv {
+	color: var(--accent);
+	border-color: var(--accent);
+}
+
+.umschalter--aktiv::before {
+	content: "● ";
+}
+
+.anmeldung-fehler {
+	color: var(--accent);
+	border: 1px solid var(--accent);
+	border-radius: 4px;
+	padding: 0.5rem 0.85rem;
+	font-size: 16px;
+	margin: 0.75rem 0 0;
+}
+
+/* --- Threads-Overlay: gespeicherte Gespräche --------------------------- */
+
+.threads-liste {
+	display: grid;
+	gap: 0.5rem;
+	align-content: start;
+}
+
+.threads-leer {
+	color: var(--text-muted);
+	font-size: 16px;
+	margin: 0;
+}
+
+.thread-eintrag {
+	display: flex;
+	align-items: stretch;
+	gap: 0.5rem;
+	border: 1px solid var(--border);
+	border-radius: 4px;
+	padding: 0.35rem;
+}
+
+.thread-eintrag--aktiv {
+	border-color: var(--accent);
+}
+
+.thread-info {
+	flex: 1;
+	display: grid;
+	gap: 0.15rem;
+	text-align: left;
+	background: none;
+	border: none;
+	border-radius: 4px;
+	color: var(--text);
+	font-family: inherit;
+	font-size: 16px;
+	padding: 0.5rem 0.75rem;
+	cursor: pointer;
+}
+
+.thread-info:hover {
+	background: var(--bg);
+}
+
+.thread-titel {
+	font-weight: 700;
+}
+
+.thread-datum {
+	color: var(--text-muted);
+	font-size: 14px;
+}
+
 /* --- Onboarding: fünf Seiten im eigenen Overlay -------------------------
    Bewusst zentriert (nicht das rechte Dialog-Panel), damit der ruhige
    Lese-Eindruck erhalten bleibt. */
