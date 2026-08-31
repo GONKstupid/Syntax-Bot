@@ -35,12 +35,12 @@ const html = `<!DOCTYPE html><html><body>
 <div id="menue" hidden></div>
 </body></html>`;
 
-function webviewStarten(t) {
-	const gesendet = [];
+function webviewStarten(t: { after: (fn: () => void) => void } | undefined) {
+	const gesendet: Array<Record<string, unknown>> = [];
 	const dom = new JSDOM(html, { runScripts: "outside-only", url: "https://localhost/" });
 	if (t) t.after(() => dom.window.close());
 	dom.window.acquireVsCodeApi = () => ({
-		postMessage: (n) => {
+		postMessage: (n: Record<string, unknown>) => {
 			gesendet.push(n);
 			return true;
 		},
@@ -51,7 +51,7 @@ function webviewStarten(t) {
 	return {
 		dom,
 		gesendet,
-		empfangen: (nachricht) => dom.window.dispatchEvent(new dom.window.MessageEvent("message", { data: nachricht })),
+		empfangen: (nachricht: Record<string, unknown>) => dom.window.dispatchEvent(new dom.window.MessageEvent("message", { data: nachricht })),
 	};
 }
 
@@ -111,6 +111,70 @@ test("Antwort-Chunks landen im Verlauf und werden bei turnEnd abgeschlossen", (t
 	const verlauf = dom.window.document.getElementById("verlauf");
 	assert.match(verlauf.textContent, /Hallo Welt/);
 	assert.ok(verlauf.querySelector("strong"));
+});
+
+test("Arbeits-Anzeige erscheint während eines Zugs und verschwindet bei turnEnd", (t) => {
+	const { dom, empfangen } = webviewStarten(t);
+	const verlauf = dom.window.document.getElementById("verlauf");
+	empfangen({ type: "userText", text: "Hallo" });
+	assert.ok(verlauf.querySelector(".arbeitenZeile"), "Anzeige fehlt während des Zugs");
+	assert.match(verlauf.textContent, /Syntax Bot arbeitet/);
+	empfangen({ type: "turnEnd" });
+	assert.equal(verlauf.querySelector(".arbeitenZeile"), null, "Anzeige bleibt nach turnEnd stehen");
+});
+
+test("Denk-Block ist während des Denkens offen und klappt bei der Antwort ein", (t) => {
+	const { dom, empfangen } = webviewStarten(t);
+	empfangen({ type: "update", update: { sessionUpdate: "agent_thought_chunk", content: { type: "text", text: "Ich überlege …" } } });
+	const verlauf = dom.window.document.getElementById("verlauf");
+	const block = verlauf.querySelector(".nachricht.denken");
+	assert.ok(block);
+	assert.match(block.textContent, /💡/, "💡-Icon fehlt");
+	assert.ok(!block.classList.contains("eingeklappt"), "während des Denkens muss der Block offen sein");
+
+	// Antwort beginnt → einklappen.
+	empfangen({ type: "update", update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "Fertig." } } });
+	assert.ok(block.classList.contains("eingeklappt"), "nach Antwortbeginn muss der Block eingeklappt sein");
+
+	// Manuelles Aufklappen per Kopfzeile.
+	block.querySelector(".denkenKopf").click();
+	assert.ok(!block.classList.contains("eingeklappt"), "Kopfzeile muss den Block wieder aufklappen");
+});
+
+test("Code-Blöcke bekommen einen Kopier-Knopf, der den Code in die Zwischenablage legt", async (t) => {
+	const { dom, empfangen } = webviewStarten(t);
+	let kopiert = null;
+	Object.defineProperty(dom.window.navigator, "clipboard", {
+		configurable: true,
+		value: { writeText: async (text: string) => { kopiert = text; } },
+	});
+	empfangen({
+		type: "update",
+		update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "Führe aus:\n```bash\nnpm test\n```" } },
+	});
+	const verlauf = dom.window.document.getElementById("verlauf");
+	const knopf = verlauf.querySelector(".codeBlock .copyKnopf");
+	assert.ok(knopf, "Kopier-Knopf fehlt");
+	assert.match(verlauf.querySelector(".codeSprache").textContent, /bash/);
+	knopf.click();
+	await new Promise((fertig) => setTimeout(fertig, 10));
+	assert.equal(kopiert, "npm test");
+	assert.equal(knopf.textContent, "Kopiert ✓");
+});
+
+test("Nutzer- und Bot-Nachrichten sind klar getrennte Blöcke", (t) => {
+	const { dom, empfangen } = webviewStarten(t);
+	const eingabe = dom.window.document.getElementById("eingabe");
+	eingabe.value = "Frage";
+	dom.window.document.getElementById("senden").click();
+	empfangen({ type: "update", update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "Antwort" } } });
+	const verlauf = dom.window.document.getElementById("verlauf");
+	assert.ok(verlauf.querySelector(".nachricht.nutzer"), "Nutzer-Nachricht fehlt");
+	assert.ok(verlauf.querySelector(".nachricht.bot"), "Bot-Antwort fehlt");
+	assert.notEqual(
+		verlauf.querySelector(".nachricht.nutzer"),
+		verlauf.querySelector(".nachricht.bot"),
+	);
 });
 
 test("„/“ öffnet das Command-Popup und Enter vervollständigt", (t) => {

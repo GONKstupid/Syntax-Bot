@@ -44,6 +44,8 @@ interface ProviderRegistration {
 		cost: { input: number; output: number; cacheRead: number; cacheWrite: number };
 		contextWindow: number;
 		maxTokens: number;
+		/** Kompatibilitäts-Schalter für OpenAI-kompatible Endpunkte. */
+		compat?: { supportsFinishReason?: boolean };
 	}>;
 }
 
@@ -256,6 +258,12 @@ export async function applyByomToSession(session: AgentSession, config: ByomConf
 				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
 				contextWindow: STANDARD_KONTEXTFENSTER,
 				maxTokens: STANDARD_MAX_TOKENS,
+				// Freie Endpunkte (LM Studio, Ollama, llama.cpp …) liefern nicht
+				// immer ein finish_reason im letzten Chunk — ohne diesen Schalter
+				// wirft Pi „Stream ended without finish_reason". Mit dem Schalter
+				// wird ein fehlendes finish_reason als „stop"/„toolUse" gedeutet;
+				// ein vorhandenes wird weiterhin normal ausgewertet.
+				compat: { supportsFinishReason: false },
 			},
 		],
 	};

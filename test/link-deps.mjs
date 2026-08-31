@@ -9,7 +9,7 @@
  *   node test/link-deps.mjs
  */
 
-import { existsSync, mkdirSync, symlinkSync, rmSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, symlinkSync, rmSync, unlinkSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -17,6 +17,14 @@ import { fileURLToPath } from "node:url";
 const PACKAGES = ["@earendil-works/pi-coding-agent", "@earendil-works/pi-ai", "@earendil-works/pi-agent-core", "@earendil-works/pi-tui", "typebox", "ws"];
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+
+function isLink(pfad) {
+	try {
+		return lstatSync(pfad).isSymbolicLink();
+	} catch {
+		return false;
+	}
+}
 const home = process.env.SYNTAX_BOT_HOME || join(homedir(), ".syntax-bot");
 const runtimeModules = join(home, "runtime", "node_modules");
 
@@ -43,7 +51,15 @@ for (const name of PACKAGES) {
 	}
 
 	mkdirSync(dirname(target), { recursive: true });
-	if (existsSync(target)) rmSync(target, { recursive: true, force: true });
+	if (existsSync(target) || isLink(target)) {
+		// Windows-Junctions lassen sich nur per unlink entfernen — rmSync würde
+		// in das verlinkte Ziel hineinlöschen (und der Link bliebe bestehen).
+		if (isLink(target)) {
+			unlinkSync(target);
+		} else {
+			rmSync(target, { recursive: true, force: true });
+		}
+	}
 	symlinkSync(source, target, linkType);
 	created++;
 }

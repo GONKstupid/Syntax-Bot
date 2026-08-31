@@ -98,10 +98,66 @@ body {
 	margin-bottom: 2px;
 	user-select: none;
 }
-.nachricht.nutzer .rolle { color: var(--text); opacity: 0.6; }
-.nachricht.denken { opacity: 0.65; }
-.nachricht.denken .rolle { color: var(--muted); }
-.nachricht.denken .md { font-style: italic; white-space: pre-wrap; }
+
+/* Klare Trennung: Nutzer-Nachrichten als rechtsbündige Blase, Bot-Antworten
+   als eigene Karte mit Rand. Fehler fallen durch den roten Akzent auf. */
+.nachricht.nutzer {
+	align-self: flex-end;
+	max-width: 85%;
+	background: var(--surface);
+	border: 1px solid var(--border);
+	padding: 6px 10px;
+}
+.nachricht.nutzer .rolle { color: var(--text); opacity: 0.6; text-align: right; }
+.nachricht.bot .md,
+.nachricht.fehler .md {
+	border: 1px solid var(--border);
+	border-left: 3px solid var(--muted);
+	background: color-mix(in srgb, var(--surface) 60%, transparent);
+	padding: 8px 10px;
+}
+.nachricht.fehler .md { border-left-color: var(--accent); }
+.nachricht.denken { opacity: 0.85; }
+.nachricht.denken .md { white-space: pre-wrap; font-style: italic; border-left-color: var(--border); }
+
+/* Denk-Block: Kopfzeile mit 💡-Icon, während des Denkens offen/lesbar,
+   danach eingeklappt und nur manuell aufklappbar. */
+.denkenKopf {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	background: none;
+	border: none;
+	color: var(--muted);
+	font-family: inherit;
+	font-size: 11px;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	padding: 0;
+	margin-bottom: 2px;
+	cursor: pointer;
+}
+.denkenKopf:hover { color: var(--text); }
+.denkenKopf:focus-visible { outline: 2px solid var(--accent); }
+.denkenIcon { font-size: 12px; }
+.denkenStatus { font-size: 10px; text-transform: none; letter-spacing: 0; }
+.nachricht.denken.fertig .denkenStatus { display: none; }
+.denkenPfeil { transition: transform 120ms ease-out; }
+.nachricht.denken.eingeklappt .denkenPfeil { transform: rotate(-90deg); }
+.nachricht.denken.eingeklappt .md { display: none; }
+
+/* Arbeits-Anzeige: „Syntax Bot arbeitet“ mit pulsierenden Punkten. */
+.arbeitenZeile {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	color: var(--muted);
+	font-size: 11px;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	user-select: none;
+}
+.arbeitenPunkte::after { content: "·"; }
 
 .md p { margin: 0.35em 0; }
 .md pre {
@@ -109,12 +165,46 @@ body {
 	border: 1px solid var(--border);
 	padding: 8px 10px;
 	overflow-x: auto;
-	margin: 0.5em 0;
+	margin: 0;
 }
 .md code { font-family: inherit; }
 .md :not(pre) > code { background: var(--surface); padding: 0 4px; border-radius: 3px; }
 .md a { color: var(--accent); }
 .md h1, .md h2, .md h3 { font-size: inherit; text-decoration: underline; margin: 0.5em 0 0.25em; }
+
+/* Code-Block mit Kopfzeile (Sprache + Kopier-Knopf). */
+.md .codeBlock {
+	border: 1px solid var(--border);
+	margin: 0.5em 0;
+}
+.md .codeBlock pre { border: none; margin: 0; }
+.codeKopf {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	padding: 3px 8px;
+	border-bottom: 1px solid var(--border);
+	background: color-mix(in srgb, var(--surface) 80%, transparent);
+}
+.codeSprache {
+	font-size: 10px;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	color: var(--muted);
+}
+.copyKnopf {
+	background: none;
+	border: 1px solid var(--border);
+	color: var(--text);
+	font-family: inherit;
+	font-size: 10px;
+	padding: 2px 8px;
+	cursor: pointer;
+	border-radius: 3px;
+}
+.copyKnopf:hover { border-color: var(--accent); color: var(--accent); }
+.copyKnopf:focus-visible { outline: 2px solid var(--accent); }
 
 .werkzeug {
 	font-size: 11px;
@@ -272,4 +362,18 @@ button.aktion.ja {
 @media (prefers-reduced-motion: no-preference) {
 	.nachricht, .berechtigung { animation: erscheinen 120ms ease-out; }
 	@keyframes erscheinen { from { opacity: 0; } to { opacity: 1; } }
+
+	/* Punkt-Animation der Arbeits-Anzeige. */
+	.arbeitenPunkte::after { content: ""; animation: arbeitsPunkte 1.2s steps(4) infinite; }
+	@keyframes arbeitsPunkte {
+		0% { content: ""; }
+		25% { content: "·"; }
+		50% { content: "··"; }
+		75% { content: "···"; }
+		100% { content: "···"; }
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.arbeitenPunkte::after { content: "···"; }
 }

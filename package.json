@@ -27,7 +27,7 @@
   },
   "scripts": {
     "start": "bash scripts/syntax-bot.sh",
-    "web": "node web/server/index.ts",
+    "web": "node vscode/web/server/index.ts",
     "ide": "node ide/index.ts",
     "build:vscode": "node vscode/esbuild.mjs",
     "update-pi": "bash scripts/update-pi.sh",

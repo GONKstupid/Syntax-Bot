@@ -24,7 +24,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import type { AcpVerbindung, RpcNotification, RpcRequest } from "./acp.ts";
 import { IdeUiBridge } from "./ui-bridge.ts";
-import { applyByomToSession, fetchRemoteModels, validateByomConfig } from "../web/server/byom.ts";
+import { applyByomToSession, fetchRemoteModels, validateByomConfig } from "../vscode/web/server/byom.ts";
 
 /** Die Modi als ACP-Modi — Reihenfolge wie in der Spec-Tabelle. */
 export const MODI = [

@@ -8,7 +8,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, describe, it } from "node:test";
-import { createJailExtension, isInsideRoot } from "../web/server/jail-extension.ts";
+import { createJailExtension, isInsideRoot } from "../vscode/web/server/jail-extension.ts";
 import { createStub, type Stub } from "./stub-pi.ts";
 
 let root: string;

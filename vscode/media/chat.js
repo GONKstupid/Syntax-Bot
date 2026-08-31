@@ -262,10 +262,15 @@ function escapen(text) {
 }
 
 function markdown(text) {
-	// Fenced Code-Blöcke zuerst herausziehen.
+	// Fenced Code-Blöcke zuerst herausziehen — mit Kopfzeile und Kopier-Knopf.
 	const bloecke = [];
-	text = text.replace(/```(\w*)\n([\s\S]*?)```/g, (_m, _sprache, code) => {
-		bloecke.push(`<pre><code>${escapen(code.replace(/\n$/, ""))}</code></pre>`);
+	text = text.replace(/```(\w*)\n([\s\S]*?)```/g, (_m, sprache, code) => {
+		const sauber = code.replace(/\n$/, "");
+		bloecke.push(
+			`<div class="codeBlock"><div class="codeKopf"><span class="codeSprache">${escapen(sprache || "code")}</span>` +
+				`<button type="button" class="copyKnopf">Kopieren</button></div>` +
+				`<pre><code>${escapen(sauber)}</code></pre></div>`,
+		);
 		return `\u0000${bloecke.length - 1}\u0000`;
 	});
 
@@ -305,20 +310,84 @@ function nachrichtHinzufuegen(rolle, klasse) {
 
 let aktuelleAntwort = null;
 let denkElement = null;
+let denkBlock = null;
+let arbeitenZeile = null;
+
+/* Arbeits-Anzeige: kleine Animation, solange Syntax Bot an einer Antwort
+   arbeitet (wie in üblichen Chat-Oberflächen). */
+function arbeitAnzeigen(sichtbar) {
+	if (sichtbar) {
+		if (arbeitenZeile) return;
+		arbeitenZeile = document.createElement("div");
+		arbeitenZeile.className = "arbeitenZeile";
+		const text = document.createElement("span");
+		text.textContent = "Syntax Bot arbeitet";
+		const punkte = document.createElement("span");
+		punkte.className = "arbeitenPunkte";
+		punkte.setAttribute("aria-hidden", "true");
+		arbeitenZeile.append(text, punkte);
+		verlauf.appendChild(arbeitenZeile);
+		verlauf.scrollTop = verlauf.scrollHeight;
+	} else if (arbeitenZeile) {
+		arbeitenZeile.remove();
+		arbeitenZeile = null;
+	}
+}
+
+function denkBlockErzeugen() {
+	const { element, koerper } = nachrichtHinzufuegen("", "bot denken");
+	const kopf = document.createElement("button");
+	kopf.type = "button";
+	kopf.className = "denkenKopf";
+	const icon = document.createElement("span");
+	icon.className = "denkenIcon";
+	icon.setAttribute("aria-hidden", "true");
+	icon.textContent = "💡";
+	const etikett = document.createElement("span");
+	etikett.textContent = "Denkprozess";
+	const status = document.createElement("span");
+	status.className = "denkenStatus";
+	status.textContent = "denkt …";
+	const pfeil = document.createElement("span");
+	pfeil.className = "denkenPfeil";
+	pfeil.setAttribute("aria-hidden", "true");
+	pfeil.textContent = "▾";
+	kopf.append(icon, etikett, status, pfeil);
+	kopf.addEventListener("click", () => element.classList.toggle("eingeklappt"));
+	kopf.addEventListener("keydown", (e) => {
+		if (e.key === "Enter" || e.key === " ") {
+			e.preventDefault();
+			element.classList.toggle("eingeklappt");
+		}
+	});
+	element.querySelector(".rolle").replaceWith(kopf);
+	return { element, koerper };
+}
 
 function denkTextAnhaengen(text) {
-	// Denk-Protokoll als gedämpfter, eingerückter Block über der Antwort.
+	// Denk-Protokoll während des Denkens lesbar (offen, mit 💡-Icon);
+	// eingeklappt wird es erst, wenn die Antwort beginnt oder der Zug endet.
 	if (!denkElement) {
-		const block = nachrichtHinzufuegen("Denkprozess", "bot denken");
+		const block = denkBlockErzeugen();
+		denkBlock = block.element;
 		denkElement = block.koerper;
 	}
+	denkBlock.classList.remove("eingeklappt", "fertig");
 	denkElement.textContent += text;
 	verlauf.scrollTop = verlauf.scrollHeight;
 }
 
-function antwortTextAnhaengen(text) {
-	// Erste Antwort beendet den Denk-Block.
+function denkEinklappen() {
+	if (denkBlock) {
+		denkBlock.classList.add("eingeklappt", "fertig");
+	}
 	denkElement = null;
+}
+
+function antwortTextAnhaengen(text) {
+	// Erste Antwort beendet den Denk-Block und klappt ihn ein — der Inhalt
+	// bleibt per Klick auf die Kopfzeile einsehbar.
+	denkEinklappen();
 	if (!aktuelleAntwort) {
 		aktuelleAntwort = { roh: "", werkzeuge: new Map() };
 	}
@@ -331,6 +400,34 @@ function renderMarkdownIn(ziel, roh) {
 	ziel.innerHTML = markdown(roh);
 	verlauf.scrollTop = verlauf.scrollHeight;
 }
+
+/* Kopier-Knöpfe in Code-Blöcken: per Delegation, weil der Markdown-Renderer
+   die Blöcke neu aufbaut (Listener würden sonst verloren gehen). */
+verlauf.addEventListener("click", async (ereignis) => {
+	const knopf = ereignis.target.closest?.(".copyKnopf");
+	if (!knopf) return;
+	const codeText = knopf.closest(".codeBlock")?.querySelector("pre code")?.textContent ?? "";
+	let ok = false;
+	try {
+		await navigator.clipboard.writeText(codeText);
+		ok = true;
+	} catch {
+		// Rückfall für Umgebungen ohne Clipboard-API (z. B. alte Webview-Builds).
+		try {
+			const feld = document.createElement("textarea");
+			feld.value = codeText;
+			feld.style.cssText = "position:fixed;opacity:0";
+			document.body.appendChild(feld);
+			feld.select();
+			ok = document.execCommand("copy");
+			feld.remove();
+		} catch {
+			ok = false;
+		}
+	}
+	knopf.textContent = ok ? "Kopiert ✓" : "Fehler";
+	setTimeout(() => { knopf.textContent = "Kopieren"; }, 1500);
+});
 
 function fehlerAnzeigen(text) {
 	const { koerper } = nachrichtHinzufuegen("Fehler", "fehler meldung");
@@ -437,6 +534,7 @@ window.addEventListener("message", (ereignis) => {
 		case "userText":
 			// Wird jetzt schon lokal beim Senden gezeigt — hier nur absichern.
 			denkElement = null;
+			denkBlock = null;
 			aktuelleAntwort = null;
 			setLaufend(true);
 			break;
@@ -477,6 +575,8 @@ window.addEventListener("message", (ereignis) => {
 			break;
 		case "turnEnd":
 			setLaufend(false);
+			// Zug vorbei: offenen Denk-Block einklappen.
+			denkEinklappen();
 			break;
 		case "error":
 			fehlerAnzeigen(n.text);
@@ -490,6 +590,7 @@ function setLaufend(zustand) {
 	senden.textContent = läuft ? "■" : "➤";
 	senden.title = läuft ? "Abbrechen" : "Senden";
 	eingabe.disabled = false;
+	arbeitAnzeigen(zustand);
 }
 
 /* ---------- Eingabe ---------- */
@@ -509,6 +610,7 @@ function sendOderStop() {
 	}
 	// Eigene Nachricht SOFORT zeigen — nicht erst nach dem Rundtrip.
 	denkElement = null;
+	denkBlock = null;
 	nachrichtHinzufuegen("Du", "nutzer").koerper.textContent = text;
 	aktuelleAntwort = null;
 	setLaufend(true);

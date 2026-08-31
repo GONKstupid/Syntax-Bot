@@ -23,14 +23,14 @@ import {
 	sessionTokenFromHeader,
 	type AuthConfig,
 	type WebSession,
-} from "../web/server/auth.ts";
+} from "../vscode/web/server/auth.ts";
 import { lookup } from "node:dns/promises";
 import {
 	applyByomToSession,
 	fetchRemoteModels,
 	pruefeEndpunkt,
 	validateByomConfig,
-} from "../web/server/byom.ts";
+} from "../vscode/web/server/byom.ts";
 
 const beispielConfig: AuthConfig = {
 	clientId: "client-id",
@@ -307,6 +307,10 @@ describe("applyByomToSession", () => {
 		assert.ok(registrierung.payload);
 		assert.equal(registrierung.payload.api, "openai-completions");
 		assert.equal(registrierung.payload.apiKey, "geheim");
+		// Freie Endpunkte liefern nicht immer finish_reason — der Kompat-Schalter
+		// verhindert den Abbruch „Stream ended without finish_reason".
+		const modelle = registrierung.payload.models as Array<{ compat?: { supportsFinishReason?: boolean } }>;
+		assert.equal(modelle[0]?.compat?.supportsFinishReason, false);
 		assert.deepEqual(gesetzt, [{ id: "modell-b" }]);
 	});
 });

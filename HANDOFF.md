@@ -16,6 +16,7 @@
 > 2. **Sprache:** durchgehend Deutsch — UI (wenn relevant), Kommentare, Commits, diese Datei.
 > 3. **Änderungen:** Änderungen am Code werden immer mit einer **Diff-Vorschau** (via Agent) vorgeschlagen. Der Agent schreibt nie ungefragt in Dateien.
 > 4. **Sicherheit:** Vor jeder Installation von Pi-Paketen (via Meta-Tool) muss eine explizite Bestätigung des Nutzers eingeholt werden.
+> 5. **Commit/Push:** Spätestens nach **drei Runden** wird alles committet und gepusht — außer es wird ausdrücklich verlangt, nicht zu pushen.
 
 ---
 

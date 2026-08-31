@@ -34,11 +34,17 @@ cpSync(join(hier, "..", "package.json"), join(dist, "pi-package", "package.json"
 // photon-node lädt sein WASM über __dirname — gebündelt geht das nicht,
 // also liegt das Paket als Datei neben dem Bundle.
 mkdirSync(join(dist, "node_modules", "@silvia-odwyer"), { recursive: true });
-cpSync(
+import { existsSync as _existsSync } from "node:fs";
+import { homedir as _homedir } from "node:os";
+const _kandidaten = [
 	join(hier, "..", "node_modules", "@earendil-works", "pi-coding-agent", "node_modules", "@silvia-odwyer", "photon-node"),
-	join(dist, "node_modules", "@silvia-odwyer", "photon-node"),
-	{ recursive: true },
-);
+	join(hier, "..", "node_modules", "@silvia-odwyer", "photon-node"),
+	join(_homedir(), ".syntax-bot", "runtime", "node_modules", "@silvia-odwyer", "photon-node"),
+	join(_homedir(), ".syntax-bot", "runtime", "node_modules", "@earendil-works", "pi-coding-agent", "node_modules", "@silvia-odwyer", "photon-node"),
+];
+const _photonSrc = _kandidaten.find((p) => _existsSync(p));
+if (!_photonSrc) throw new Error(`photon-node nicht gefunden. Kandidaten geprüft: ${_kandidaten.join(", ")}`);
+cpSync(_photonSrc, join(dist, "node_modules", "@silvia-odwyer", "photon-node"), { recursive: true });
 
 const optionen = {
 	entryPoints: [join(hier, "src", "extension.ts")],
