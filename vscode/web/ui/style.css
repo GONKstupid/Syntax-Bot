@@ -781,6 +781,24 @@ code {
 	margin: 0.75rem 0 0;
 }
 
+/* Passwortfeld mit Ein-/Ausblend-Knopf nebeneinander. */
+.passwort-zeile {
+	display: flex;
+	gap: 0.5rem;
+	align-items: stretch;
+}
+
+.passwort-zeile input {
+	flex: 1;
+	min-width: 0;
+}
+
+.passwort-auge {
+	white-space: nowrap;
+	font-weight: 400;
+	min-width: 7.5rem;
+}
+
 /* --- Threads-Overlay: gespeicherte Gespräche --------------------------- */
 
 .threads-liste {
@@ -880,6 +898,19 @@ code {
 
 .onboarding-liste li::marker {
 	color: var(--accent);
+}
+
+/* Drei Anmeldewege auf der letzten Onboarding-Seite. */
+.onboarding-wege {
+	margin: 0.75rem 0;
+	padding-left: 1.4rem;
+	display: grid;
+	gap: 0.5rem;
+}
+
+.onboarding-wege li::marker {
+	color: var(--accent);
+	font-weight: 700;
 }
 
 .onboarding-form-knoepfe {

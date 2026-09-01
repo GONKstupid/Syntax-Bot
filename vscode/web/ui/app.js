@@ -800,6 +800,10 @@ document.getElementById("onb-testen").addEventListener("click", () => {
 	});
 });
 
+document.getElementById("onb-zu-konto").addEventListener("click", () => {
+	location.href = "/konto";
+});
+
 onbModellliste.addEventListener("change", () => {
 	if (onbModellliste.value) onbModell.value = onbModellliste.value;
 });

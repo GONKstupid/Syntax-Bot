@@ -37,13 +37,15 @@ pruefe("GET / liefert 200", start.status === 200, `Status ${start.status}`);
 pruefe("GET / liefert die Anmeldeseite", startHtml.includes("Syntax Bot"));
 pruefe("Anmeldeseite hat Anmelden/Registrieren-Formular",
 	startHtml.includes("umschalter-anmelden") && startHtml.includes("umschalter-registrieren")
-	&& startHtml.includes("feld-passwort") && startHtml.includes("Ohne Konto fortfahren"));
+	&& startHtml.includes("feld-passwort") && startHtml.includes("feld-passwort-wiederholung")
+	&& startHtml.includes("passwort-auge") && startHtml.includes("Ohne Konto fortfahren"));
 
 const antwort = await fetch(`${basis}/app`);
 const html = await antwort.text();
 pruefe("GET /app liefert 200", antwort.status === 200, `Status ${antwort.status}`);
 pruefe("GET /app liefert die UI", html.includes("Syntax Bot") && html.includes("verlauf"));
 pruefe("UI enthält Onboarding und Kopf-Aktionen", html.includes("onboarding-overlay") && html.includes("neu-knopf") && html.includes("menue-knopf"));
+pruefe("Onboarding-Seite nennt alle drei Anmeldewege", html.includes("onboarding-wege") && html.includes("onb-zu-konto"));
 pruefe("UI enthält das Threads-Overlay", html.includes("threads-overlay") && html.includes("threads-liste"));
 pruefe("Aktionsleiste unter der Eingabe", html.includes("fuss-werkzeug") && html.includes("modell-knopf") && html.includes("kontext-anzeige"));
 pruefe("LRS-Schrift ist entfernt", !html.includes("opendyslexic") && !html.includes("schrift-lrs"));

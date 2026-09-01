@@ -25,7 +25,7 @@
 			<div class="einstellungen-zeile" id="zeile-nutzername" hidden>
 				<label for="feld-nutzername">Nutzername</label>
 				<input id="feld-nutzername" name="nutzername" type="text" autocomplete="username"
-					placeholder="z. B. ada_lovelace">
+					placeholder="z. B. Goblin">
 			</div>
 			<div class="einstellungen-zeile">
 				<label for="feld-kennung" id="kennung-etikett">Nutzername oder E-Mail</label>
@@ -33,12 +33,25 @@
 			</div>
 			<div class="einstellungen-zeile" id="zeile-email" hidden>
 				<label for="feld-email">E-Mail</label>
-				<input id="feld-email" name="email" type="email" autocomplete="email" placeholder="du@example.de">
+				<input id="feld-email" name="email" type="email" autocomplete="email" placeholder="nerd.gpt@open-ai.com">
 			</div>
 			<div class="einstellungen-zeile">
 				<label for="feld-passwort">Passwort</label>
-				<input id="feld-passwort" name="passwort" type="password" autocomplete="current-password"
-					required minlength="8">
+				<div class="passwort-zeile">
+					<input id="feld-passwort" name="passwort" type="password" autocomplete="current-password"
+						required minlength="8">
+					<button type="button" class="knopf knopf--klein knopf--sekundaer passwort-auge"
+						data-feld="feld-passwort" aria-pressed="false">anzeigen</button>
+				</div>
+			</div>
+			<div class="einstellungen-zeile" id="zeile-passwort-wiederholung" hidden>
+				<label for="feld-passwort-wiederholung">Passwort bestätigen</label>
+				<div class="passwort-zeile">
+					<input id="feld-passwort-wiederholung" name="passwort-wiederholung" type="password"
+						autocomplete="new-password" minlength="8">
+					<button type="button" class="knopf knopf--klein knopf--sekundaer passwort-auge"
+						data-feld="feld-passwort-wiederholung" aria-pressed="false">anzeigen</button>
+				</div>
 			</div>
 			<p id="anmeldung-fehler" class="anmeldung-fehler" role="alert" hidden></p>
 			<div class="anmeldung-wege">

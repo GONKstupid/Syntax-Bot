@@ -141,15 +141,22 @@
 				<h2 class="onboarding-titel">Dein Modell verbinden</h2>
 				<p>
 					Syntax Bot braucht ein Sprachmodell — du bringst es selbst mit.
-					Drei Wege stehen offen: API-Key (Anthropic, OpenAI, …), Anmeldung
-					im Browser (Claude Pro/Max, ChatGPT-Plus, …) oder ein eigener
-					OpenAI-kompatibler Endpunkt (z.&nbsp;B. Ollama, LM Studio,
-					llama.cpp). Alle drei findest du unter »Konto« — hier kannst du
-					direkt mit einem eigenen Endpunkt starten oder den Schritt
-					überspringen.
+					Drei Wege stehen offen:
 				</p>
+				<ol class="onboarding-wege">
+					<li><strong>API-Key</strong> — Anthropic, OpenAI, OpenRouter, Mistral und viele mehr.</li>
+					<li><strong>Anmeldung im Browser</strong> — Claude Pro/Max, ChatGPT-Plus und ähnliche Abos.</li>
+					<li><strong>Eigener Endpunkt</strong> — Ollama, LM Studio, llama.cpp (OpenAI-kompatibel).</li>
+				</ol>
+				<p>
+					Alle drei Wege findest du unter »Konto«. Weg 3 kannst du hier
+					direkt einrichten — oder den Schritt überspringen.
+				</p>
+				<div class="onboarding-form-knoepfe">
+					<button id="onb-zu-konto" type="button" class="knopf knopf--sekundaer">Alle Wege unter »Konto« öffnen</button>
+				</div>
 				<div class="einstellungen-zeile">
-					<label for="onb-endpunkt">Endpunkt</label>
+					<label for="onb-endpunkt">Eigener Endpunkt</label>
 					<input id="onb-endpunkt" type="url" autocomplete="off" placeholder="http://localhost:11434/v1">
 				</div>
 				<div class="einstellungen-zeile">
