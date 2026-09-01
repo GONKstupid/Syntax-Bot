@@ -56,6 +56,7 @@ let status = {
 };
 let aktuellerModus = null; // Anzeigename des aktiven Modus, z. B. „Syntax Fix“
 let gespeicherteProvider = [];
+let nativeModelle = []; // aus „models“: alle Modelle angemeldeter Provider
 
 /* --- Hilfsfunktionen --------------------------------------------------- */
 
@@ -490,11 +491,22 @@ function zeigeModus(text) {
 /* --- Fußleisten-Menüs: Modell, Thinking, Modus -------------------------- */
 
 modellKnopf.addEventListener("click", () => {
-	const eintraege = gespeicherteProvider.map((provider) => ({
-		text: `${provider.displayName} · ${provider.modelId}`,
-		aktiv: status.modell === provider.modelId,
-		aktion: () => sendeNachricht({ type: "byom_activate", providerId: provider.providerId }),
+	// Erst alle Modelle angemeldeter Provider (API-Key/Browser-Anmeldung),
+	// dann die gespeicherten eigenen Endpunkte — wie /model in der IDE.
+	const eintraege = nativeModelle.map((modell) => ({
+		text: modell.id,
+		beschreibung: modell.provider || undefined,
+		aktiv: Boolean(modell.aktiv),
+		aktion: () => sendeNachricht({ type: "model_set", modelId: modell.id }),
 	}));
+	for (const provider of gespeicherteProvider) {
+		eintraege.push({
+			text: `${provider.displayName} · ${provider.modelId}`,
+			beschreibung: "Eigener Endpunkt",
+			aktiv: status.modell === provider.modelId,
+			aktion: () => sendeNachricht({ type: "byom_activate", providerId: provider.providerId }),
+		});
+	}
 	eintraege.push({
 		text: "Modell konfigurieren …",
 		beschreibung: "Konto",
@@ -888,7 +900,12 @@ function verarbeiteNachricht(nachricht) {
 				nutzerName.hidden = false;
 			}
 			sendeNachricht({ type: "byom_list" });
+			sendeNachricht({ type: "model_list" });
 			fussLeisteRendern();
+			break;
+
+		case "models":
+			nativeModelle = Array.isArray(nachricht.modelle) ? nachricht.modelle : [];
 			break;
 
 		case "threads":
@@ -942,6 +959,7 @@ function verarbeiteNachricht(nachricht) {
 		case "model_changed":
 			status.modell = nachricht.model ? String(nachricht.model) : null;
 			fussLeisteRendern();
+			sendeNachricht({ type: "model_list" });
 			break;
 
 		case "file_uploaded":

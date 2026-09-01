@@ -9,7 +9,8 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { mkdtemp } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ThreadStore, type ThreadEintrag } from "../vscode/web/server/thread-store.ts";
@@ -82,6 +83,26 @@ describe("ThreadStore", () => {
 		await new ThreadStore(datei).sichere("konto-1", eintrag({}));
 		const geoeffnet = await new ThreadStore(datei).hole("konto-1", "thread-1");
 		assert.equal(geoeffnet?.sessionDatei, "/tmp/session-1.jsonl");
+	});
+
+	it("entfernt alle Threads eines Kontos samt Session-Dateien", async () => {
+		const verzeichnis = await mkdtemp(join(tmpdir(), "syntax-threads-"));
+		const datei = join(verzeichnis, "web-threads.json");
+		const sessionDatei = join(verzeichnis, "session-1.jsonl");
+		await writeFile(sessionDatei, "{}", "utf8");
+		const store = new ThreadStore(datei);
+		await store.sichere("konto-1", eintrag({ sessionDatei }));
+		// Fehlende Session-Datei darf das Löschen nicht aufhalten.
+		await store.sichere("konto-1", eintrag({ id: "thread-2", sessionDatei: join(verzeichnis, "fehlt.jsonl") }));
+		await store.sichere("konto-2", eintrag({ id: "thread-9" }));
+
+		await store.loescheAlle("konto-1");
+		assert.deepEqual(await store.liste("konto-1"), []);
+		assert.equal(existsSync(sessionDatei), false);
+		// Andere Konten bleiben unberührt.
+		assert.equal((await store.liste("konto-2")).length, 1);
+		// Nochmal löschen ist kein Fehler.
+		await store.loescheAlle("konto-1");
 	});
 });
 

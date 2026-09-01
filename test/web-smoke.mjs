@@ -120,6 +120,16 @@ ws.send(JSON.stringify({ type: "thread_list" }));
 const threads = await warteAuf((m) => m.type === "threads");
 pruefe("thread_list antwortet mit leerer Liste", Array.isArray(threads?.threads) && threads.threads.length === 0);
 
+ws.send(JSON.stringify({ type: "model_list" }));
+const modelle = await warteAuf((m) => m.type === "models");
+pruefe("model_list antwortet mit Modell-Liste", Array.isArray(modelle?.modelle));
+
+ws.send(JSON.stringify({ type: "model_set", modelId: "gibt-es-nicht" }));
+pruefe(
+	"model_set mit unbekanntem Modell liefert Fehler",
+	Boolean(await warteAuf((m) => m.type === "notify" && m.level === "error" && /nicht verfügbar/.test(m.message ?? ""))),
+);
+
 ws.send(JSON.stringify({ type: "thread_open", threadId: "gibt-es-nicht" }));
 const hinweisThread = await warteAuf((m) => m.type === "notify" && m.level === "warning" && /nicht mehr verfügbar/.test(m.message ?? ""));
 pruefe("Unbekannter Thread meldet Hinweis", Boolean(hinweisThread));
@@ -147,5 +157,49 @@ pruefe(
 );
 
 ws.close();
+
+// 5. Kontoverwaltung: Passwort ändern und Konto löschen (HTTP, mit Cookie).
+const pwFalsch = await fetch(`${basis}/auth/password`, {
+	method: "POST",
+	headers: { "content-type": "application/json", cookie },
+	body: JSON.stringify({ passwortAlt: "falsch123", passwortNeu: "neu-geheim1" }),
+});
+pruefe("Passwort-Wechsel mit falschem altem Passwort wird abgelehnt", pwFalsch.status === 400);
+
+const pwOk = await fetch(`${basis}/auth/password`, {
+	method: "POST",
+	headers: { "content-type": "application/json", cookie },
+	body: JSON.stringify({ passwortAlt: kontoDaten.passwort, passwortNeu: "neu-geheim1" }),
+});
+pruefe("Passwort-Wechsel mit richtigem altem Passwort gelingt", pwOk.status === 200);
+
+const neuLogin = await fetch(`${basis}/auth/login`, {
+	method: "POST",
+	headers: { "content-type": "application/json" },
+	body: JSON.stringify({ kennung: testNutzer, passwort: "neu-geheim1" }),
+});
+pruefe("Login mit dem neuen Passwort gelingt", neuLogin.status === 200);
+
+const loeschFalsch = await fetch(`${basis}/auth/delete`, {
+	method: "POST",
+	headers: { "content-type": "application/json", cookie },
+	body: JSON.stringify({ passwort: "falsch123" }),
+});
+pruefe("Konto-Löschung mit falschem Passwort wird abgelehnt", loeschFalsch.status === 401);
+
+const loeschOk = await fetch(`${basis}/auth/delete`, {
+	method: "POST",
+	headers: { "content-type": "application/json", cookie },
+	body: JSON.stringify({ passwort: "neu-geheim1" }),
+});
+pruefe("Konto-Löschung mit richtigem Passwort gelingt", loeschOk.status === 200);
+
+const nachLoesch = await fetch(`${basis}/auth/login`, {
+	method: "POST",
+	headers: { "content-type": "application/json" },
+	body: JSON.stringify({ kennung: testNutzer, passwort: "neu-geheim1" }),
+});
+pruefe("Login nach der Konto-Löschung ist nicht mehr möglich", nachLoesch.status === 401);
+
 console.log(fehler === 0 ? "\nSmoke-Test bestanden." : `\n${fehler} Prüfung(en) fehlgeschlagen.`);
 process.exit(fehler === 0 ? 0 : 1);

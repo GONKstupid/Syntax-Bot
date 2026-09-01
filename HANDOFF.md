@@ -1,6 +1,8 @@
 # Syntax Bot — Projektübergabe (HANDOFF)
 
-**Stand: 2026-09-01 · Konto-Nacharbeiten Web: Ursache für „Unbekannter Fehler" und leere Anbieterlisten war ein veralteter Serverprozess auf 4711 (alter Code vor dem Konto-Umbau) — neu gestartet; Onboarding-Seite 5 listet jetzt die drei Anmeldewege explizit mit Knopf zur Konto-Seite; Registrierung mit Passwort-Bestätigung; „anzeigen/verbergen“-Knöpfe an den Passwortfeldern (Login + Registrierung); Fehleranzeige zeigt HTTP-Status statt „Unbekannter Fehler"; Anbieterlisten live geprüft: 39 API-Key- + 7 Browser-Anbieter (wie in der IDE); 131 Tests grün**
+**Stand: 2026-09-01 · Konto-Nacharbeiten II Web: Modell-Umschalter listet jetzt alle verfügbaren Modelle angemeldeter Provider (WS `model_list`/`model_set`, Filter wie verfuegbareModelle() im IDE-Adapter); Passwort ändern (`POST /auth/password`, andere Sitzungen fliegen) und Konto löschen (`POST /auth/delete` mit Passwort-Bestätigung — räumt Threads samt Session-Dateien, Provider, Credentials und Arbeitsbereich auf) über die Konto-Seite; Senden-Knopf nur noch Icon in Fußleisten-Höhe; 135 Tests grün**
+
+> **Stand: 2026-09-01 · Konto-Nacharbeiten Web: Ursache für „Unbekannter Fehler" und leere Anbieterlisten war ein veralteter Serverprozess auf 4711 (alter Code vor dem Konto-Umbau) — neu gestartet; Onboarding-Seite 5 listet jetzt die drei Anmeldewege explizit mit Knopf zur Konto-Seite; Registrierung mit Passwort-Bestätigung; „anzeigen/verbergen“-Knöpfe an den Passwortfeldern (Login + Registrierung); Fehleranzeige zeigt HTTP-Status statt „Unbekannter Fehler"; Anbieterlisten live geprüft: 39 API-Key- + 7 Browser-Anbieter (wie in der IDE); 131 Tests grün**
 
 > **Stand: 2026-09-01 · Konto-Umbau Web-Version: GitHub-OAuth ersetzt durch Registrierung/Login (Nutzername/E-Mail/Passwort, scrypt); Provider-Anmeldung wie in der IDE mit drei Wegen (API-Key, Browser-OAuth, eigener Endpunkt) pro Konto gemerkt — eigener CredentialStore pro Konto statt globaler auth.json; neue Thread-History mit vollem Fortsetzen (Pi-Session-Dateien) über das ⋯-Menü; „Ohne Konto fortfahren“ bleibt (keine Persistenz); 131 Tests grün, Smoke-Test erweitert**
 
@@ -45,7 +47,7 @@ Syntax Bot ist **ein** einziger Agent (eine Session), der seine unterschiedliche
 
 ```powershell
 .\scripts\syntax-bot.ps1          # startet Syntax Bot (richtet beim ersten Mal alles ein)
-npm test                          # 131 Tests für Modus-Grenzen, Leitplanken, Web-Jail, Konto/Threads/Auth/BYOM/SSRF, ACP
+npm test                          # 135 Tests für Modus-Grenzen, Leitplanken, Web-Jail, Konto/Threads/Auth/BYOM/SSRF, ACP
 npm run web                       # Web-Oberfläche: http://127.0.0.1:4711 (Port: SYNTAX_BOT_WEB_PORT)
 node test/web-smoke.mjs 4711      # Smoke-Test gegen einen laufenden Web-Server
 ```
@@ -117,7 +119,8 @@ Dazu `/modus` (Stand anzeigen) und `/modus-aus` (Modus beenden).
     *   **Nacharbeiten (selber Tag)**: Registrierung mit Passwort-Bestätigung (Client-Prüfung) und „anzeigen/verbergen"-Knöpfen an beiden Passwortfeldern; Fehleranzeige mit HTTP-Status statt „Unbekannter Fehler"; Onboarding-Seite 5 nennt die drei Wege als Liste mit Knopf „Alle Wege unter »Konto« öffnen".
     *   **Fehlerbild-Ursache**: Meldungen „Unbekannter Fehler" und leere Anbieter-Dropdowns kamen von einem veralteten Node-Server auf 4711 (gestartet vor dem Umbau). Nach Code-Umbauten am Web-Server den Prozess neu starten — UI-Dateien kommen frisch von der Platte, die Serverlogik nicht.
     *   **Zahlengrundlage Anbieter**: `getProviders()` liefert 40 Katalog-Einträge (39 mit `apiKey`, 7 mit `oauth`) — unabhängig von `models.json`, der Katalog kommt aus dem SDK-Paket.
-*   [x] Test-Suite: **131 Tests, alle grün** (`npm test`).
+    *   **Nacharbeiten II (selber Tag)**: Modell-Umschalter zeigt alle Modelle angemeldeter Provider — neue WS-Nachrichten `model_list`/`model_set` (`models`-Antwort mit `{id, provider, aktiv}`), Filter exakt wie `verfuegbareModelle()` im IDE-Adapter; Kontoverwaltung auf der Konto-Seite: Passwort ändern (`POST /auth/password` mit `passwortAlt`/`passwortNeu`, andere Sitzungen werden beendet — `SessionStore.deleteForUser`) und Konto löschen (`POST /auth/delete`, nur mit korrektem Passwort; räumt `ThreadStore.loescheAlle` samt Session-Dateien, `ProviderStore.loescheAlle`, Credential-Datei und Arbeitsbereich auf); Senden-Knopf als reines Icon (`fuss-knopf--senden`), gleiche Höhe wie die übrigen Fußleisten-Knöpfe.
+*   [x] Test-Suite: **135 Tests, alle grün** (`npm test`).
 *   [ ] Nächster Schritt: **Phase 2d vertiefen** — manuelle Erprobung in VS Code (ACP Client), danach ggf. Zed/VS-Code-Unterschiede im Adapter glätten.
 *   [x] Lauffähig: `scripts/syntax-bot.ps1` (CLI) und `npm run web` (Web).
 
@@ -157,7 +160,7 @@ syntax-bot/
 ├── ide/                          ← ACP-Adapter (Zed/VS-Code-ACP-Clients)
 ├── design/                       ← tokens.json, STYLE-SOURCE.md
 ├── scripts/                      ← bootstrap.mjs, syntax-bot.*, update-pi.*, update-coding-style.sh
-└── test/                         ← 131 Tests + web-smoke.mjs
+└── test/                         ← 135 Tests + web-smoke.mjs
 ```
 
 ---

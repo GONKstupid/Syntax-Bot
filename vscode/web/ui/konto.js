@@ -60,7 +60,79 @@ function kontoInfoAnzeigen(user, email) {
 	nutzerName.textContent = user;
 	nutzerName.hidden = false;
 	kontoKnoepfe.hidden = false;
+	document.getElementById("konto-verwaltung").hidden = false;
 }
+
+/* --- Kontoverwaltung: Passwort ändern, Konto löschen ---------------------- */
+
+/* Passwort ein-/ausblenden — dieselben Knöpfe wie auf der Anmeldeseite. */
+for (const knopf of document.querySelectorAll(".passwort-auge")) {
+	knopf.addEventListener("click", () => {
+		const feld = document.getElementById(knopf.dataset.feld);
+		const sichtbar = feld.type === "password";
+		feld.type = sichtbar ? "text" : "password";
+		knopf.textContent = sichtbar ? "verbergen" : "anzeigen";
+		knopf.setAttribute("aria-pressed", String(sichtbar));
+	});
+}
+
+async function kontoAktion(pfad, daten) {
+	const antwort = await fetch(pfad, {
+		method: "POST",
+		headers: { "content-type": "application/json" },
+		body: JSON.stringify(daten),
+	});
+	let koerper = {};
+	try {
+		koerper = await antwort.json();
+	} catch {
+		// Antwort ohne JSON — der Status reicht für die Meldung.
+	}
+	return { ok: antwort.ok, fehler: koerper.fehler ?? `Fehler ${antwort.status}` };
+}
+
+document.getElementById("pw-speichern").addEventListener("click", async () => {
+	const pwAlt = document.getElementById("pw-alt");
+	const pwNeu = document.getElementById("pw-neu");
+	const pwNeu2 = document.getElementById("pw-neu-2");
+	if (pwNeu.value !== pwNeu2.value) {
+		meldungHinzufuegen("error", "Die neuen Passwörter stimmen nicht überein.");
+		pwNeu2.focus();
+		return;
+	}
+	if (pwNeu.value.length < 8) {
+		meldungHinzufuegen("error", "Das neue Passwort muss mindestens 8 Zeichen lang sein.");
+		return;
+	}
+	const ergebnis = await kontoAktion("/auth/password", { passwortAlt: pwAlt.value, passwortNeu: pwNeu.value });
+	if (ergebnis.ok) {
+		meldungHinzufuegen("info", "Passwort geändert. Andere Sitzungen wurden abgemeldet.");
+		pwAlt.value = "";
+		pwNeu.value = "";
+		pwNeu2.value = "";
+	} else {
+		meldungHinzufuegen("error", ergebnis.fehler);
+	}
+});
+
+const loeschForm = document.getElementById("konto-loeschen-form");
+document.getElementById("konto-loeschen-start").addEventListener("click", () => {
+	loeschForm.hidden = false;
+	document.getElementById("loesch-passwort").focus();
+});
+document.getElementById("konto-loeschen-abbrechen").addEventListener("click", () => {
+	loeschForm.hidden = true;
+	document.getElementById("loesch-passwort").value = "";
+});
+document.getElementById("konto-loeschen-jetzt").addEventListener("click", async () => {
+	const passwort = document.getElementById("loesch-passwort").value;
+	const ergebnis = await kontoAktion("/auth/delete", { passwort });
+	if (ergebnis.ok) {
+		location.href = "/";
+		return;
+	}
+	meldungHinzufuegen("error", ergebnis.fehler);
+});
 
 /* --- Provider-Auswahllisten --------------------------------------------- */
 

@@ -10,7 +10,7 @@
  * Gespeichert unter `~/.syntax-bot/web-threads.json`.
  */
 
-import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 
 export interface ThreadEintrag {
@@ -81,5 +81,19 @@ export class ThreadStore {
 		alle[kontoId] = gefiltert;
 		await this.schreiben(alle);
 		return entfernt;
+	}
+
+	/** Alle Threads eines Kontos entfernen — samt Session-Dateien (Konto-Löschung). */
+	async loescheAlle(kontoId: string): Promise<void> {
+		const alle = await this.lesen();
+		const liste = alle[kontoId] ?? [];
+		if (liste.length === 0 && !(kontoId in alle)) return;
+		for (const eintrag of liste) {
+			await unlink(eintrag.sessionDatei).catch(() => {
+				// Fehlende Datei ist kein Fehler — der Index zählt.
+			});
+		}
+		delete alle[kontoId];
+		await this.schreiben(alle);
 	}
 }

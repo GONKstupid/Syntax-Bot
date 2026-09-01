@@ -417,6 +417,23 @@ code {
 	color: var(--accent);
 }
 
+/* Senden: nur Icon, gleiche Höhe wie die anderen Fußleisten-Knöpfe. */
+.fuss-knopf--senden {
+	border-color: var(--accent);
+	color: var(--accent);
+	padding-inline: 0.6rem;
+}
+
+.fuss-knopf--senden:hover {
+	background: var(--surface);
+}
+
+.sende-icon {
+	width: 17px;
+	height: 17px;
+	display: block;
+}
+
 .fuss-knopf .etikett {
 	max-width: 14rem;
 	overflow: hidden;
@@ -779,6 +796,26 @@ code {
 	padding: 0.5rem 0.85rem;
 	font-size: 16px;
 	margin: 0.75rem 0 0;
+}
+
+/* Kontoverwaltung: Untertitel für Passwort-Wechsel und Konto-Löschung. */
+.konto-untertitel {
+	margin: 1.5rem 0 0.5rem;
+	font-size: 17px;
+	letter-spacing: 0.04em;
+}
+
+.konto-untertitel--gefahr {
+	color: var(--accent);
+}
+
+.knopf--gefahr {
+	border-color: var(--accent);
+	color: var(--accent);
+}
+
+.knopf--gefahr:hover {
+	background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
 /* Passwortfeld mit Ein-/Ausblend-Knopf nebeneinander. */

@@ -100,6 +100,33 @@ describe("KontoStore (Registrierung und Anmeldung)", () => {
 		// Die Datei enthält keine Klartext-Passwörter.
 		assert.ok(!(await readFile(datei, "utf8")).includes("geheimnis1"));
 	});
+
+	it("ändert das Passwort nur mit korrektem altem Passwort", async () => {
+		const store = await neuerStore();
+		const konto = await store.registrieren("goblin", "goblin@example.de", "geheimnis1");
+
+		await assert.rejects(
+			store.passwortAendern(konto.id, "falsch123", "neu-geheim1"),
+			/aktuelle Passwort ist falsch/,
+		);
+		await assert.rejects(
+			store.passwortAendern(konto.id, "geheimnis1", "kurz"),
+			/mindestens 8 Zeichen/,
+		);
+		await store.passwortAendern(konto.id, "geheimnis1", "neu-geheim1");
+		// Altes Passwort gilt nicht mehr, neues schon.
+		await assert.rejects(store.anmelden("goblin", "geheimnis1"), /falsch/);
+		assert.equal((await store.anmelden("goblin", "neu-geheim1")).id, konto.id);
+	});
+
+	it("löscht ein Konto endgültig", async () => {
+		const store = await neuerStore();
+		const konto = await store.registrieren("goblin", "goblin@example.de", "geheimnis1");
+		assert.equal(await store.loeschen("unbekannt"), false);
+		assert.equal(await store.loeschen(konto.id), true);
+		await assert.rejects(store.anmelden("goblin", "geheimnis1"), /falsch/);
+		assert.equal(await store.hole(konto.id), undefined);
+	});
 });
 
 describe("scrypt-Hash und timing-sicherer Vergleich", () => {
@@ -155,6 +182,21 @@ describe("SessionStore und Verbindungslimit", () => {
 		store.delete(ada.token);
 		assert.equal(store.get(ada.token), undefined);
 		assert.equal(store.countForUser("1"), 1);
+	});
+
+	it("deleteForUser beendet alle Sitzungen — optional außer der aktuellen", () => {
+		const store = new SessionStore();
+		const eins = store.create({ id: "1", login: "ada" });
+		const zwei = store.create({ id: "1", login: "ada" });
+		const fremd = store.create({ id: "2", login: "grace" });
+
+		store.deleteForUser("1", eins.token);
+		assert.ok(store.get(eins.token)); // aktuelle Sitzung bleibt
+		assert.equal(store.get(zwei.token), undefined);
+		assert.ok(store.get(fremd.token)); // anderer Nutzer unberührt
+
+		store.deleteForUser("1");
+		assert.equal(store.countForUser("1"), 0);
 	});
 
 	it("darfVerbinden blockt ab dem Maximum", () => {

@@ -33,6 +33,61 @@
 			<div class="konto-knoepfe" id="konto-knoepfe" hidden>
 				<a class="knopf knopf--sekundaer" href="/auth/logout">Abmelden</a>
 			</div>
+
+			<!-- Kontoverwaltung: nur angemeldet sichtbar -->
+			<div id="konto-verwaltung" hidden>
+				<h4 class="konto-untertitel">Passwort ändern</h4>
+				<div class="einstellungen-zeile">
+					<label for="pw-alt">Aktuelles Passwort</label>
+					<div class="passwort-zeile">
+						<input id="pw-alt" type="password" autocomplete="current-password">
+						<button type="button" class="knopf knopf--klein knopf--sekundaer passwort-auge"
+							data-feld="pw-alt" aria-pressed="false">anzeigen</button>
+					</div>
+				</div>
+				<div class="einstellungen-zeile">
+					<label for="pw-neu">Neues Passwort</label>
+					<div class="passwort-zeile">
+						<input id="pw-neu" type="password" autocomplete="new-password" minlength="8">
+						<button type="button" class="knopf knopf--klein knopf--sekundaer passwort-auge"
+							data-feld="pw-neu" aria-pressed="false">anzeigen</button>
+					</div>
+				</div>
+				<div class="einstellungen-zeile">
+					<label for="pw-neu-2">Neues Passwort bestätigen</label>
+					<div class="passwort-zeile">
+						<input id="pw-neu-2" type="password" autocomplete="new-password" minlength="8">
+						<button type="button" class="knopf knopf--klein knopf--sekundaer passwort-auge"
+							data-feld="pw-neu-2" aria-pressed="false">anzeigen</button>
+					</div>
+				</div>
+				<div class="konto-knoepfe">
+					<button id="pw-speichern" type="button" class="knopf knopf--primaer">Passwort ändern</button>
+				</div>
+
+				<h4 class="konto-untertitel konto-untertitel--gefahr">Konto löschen</h4>
+				<p class="einstellungen-hinweis">
+					Löscht das Konto mit allen gemerkten Anbietern, Anmeldedaten
+					und Threads — endgültig.
+				</p>
+				<div class="konto-knoepfe">
+					<button id="konto-loeschen-start" type="button" class="knopf knopf--gefahr">Konto löschen …</button>
+				</div>
+				<div id="konto-loeschen-form" hidden>
+					<div class="einstellungen-zeile">
+						<label for="loesch-passwort">Zur Bestätigung: dein Passwort</label>
+						<div class="passwort-zeile">
+							<input id="loesch-passwort" type="password" autocomplete="current-password">
+							<button type="button" class="knopf knopf--klein knopf--sekundaer passwort-auge"
+								data-feld="loesch-passwort" aria-pressed="false">anzeigen</button>
+						</div>
+					</div>
+					<div class="konto-knoepfe">
+						<button id="konto-loeschen-jetzt" type="button" class="knopf knopf--gefahr">Endgültig löschen</button>
+						<button id="konto-loeschen-abbrechen" type="button" class="knopf knopf--sekundaer">Abbrechen</button>
+					</div>
+				</div>
+			</div>
 		</section>
 
 		<section class="konto-abschnitt" aria-labelledby="provider-api-titel">

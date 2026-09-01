@@ -66,6 +66,13 @@ export class SessionStore {
 		this.sessions.delete(token);
 	}
 
+	/** Alle Sitzungen eines Nutzers beenden — optional außer der aktuellen. */
+	deleteForUser(userId: string, ausserToken?: string): void {
+		for (const [token, session] of this.sessions) {
+			if (session.user.id === userId && token !== ausserToken) this.sessions.delete(token);
+		}
+	}
+
 	/** Anzahl aktiver WebSocket-Verbindungen eines Nutzers. */
 	countForUser(userId: string): number {
 		let anzahl = 0;

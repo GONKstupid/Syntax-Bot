@@ -63,7 +63,9 @@ export type ClientMessage =
 	| { type: "thread_delete"; threadId: string }
 	| { type: "provider_status" }
 	| { type: "provider_login"; art: "api" | "oauth"; providerId: string; apiKey?: string }
-	| { type: "provider_logout"; providerId: string };
+	| { type: "provider_logout"; providerId: string }
+	| { type: "model_list" }
+	| { type: "model_set"; modelId: string };
 
 /** Obergrenze für Datei-Anhänge (Base64-Transport über WebSocket). */
 const ANHANG_MAX_BYTES = 10 * 1024 * 1024;
@@ -307,6 +309,12 @@ export class HostedSession {
 			case "provider_logout":
 				await this.providerLogout(message.providerId);
 				break;
+			case "model_list":
+				await this.modelListe();
+				break;
+			case "model_set":
+				await this.modelSetzen(message.modelId);
+				break;
 			// "new_thread" und "thread_open" behandelt der Server-Einstieg selbst
 			// (Session-Neuaufbau auf derselben Verbindung).
 			case "new_thread":
@@ -547,6 +555,64 @@ export class HostedSession {
 		return { apiKey: Boolean(auth.apiKey), oauth: Boolean(auth.oauth) };
 	}
 
+	/**
+	 * Alle verfügbaren Modelle — nur angemeldete Provider werden angeboten
+	 * (derselbe Filter wie verfuegbareModelle() im IDE-Adapter).
+	 */
+	private async verfuegbareModelle(): Promise<Array<{ id: string; provider?: string }>> {
+		const laufwerk = this.session.modelRuntime;
+		const modelle = (await laufwerk.getAvailable().catch(() => [])) as readonly { id: string; provider?: string }[];
+		let konfiguriert: Set<string>;
+		try {
+			konfiguriert = new Set(
+				laufwerk
+					.getProviders()
+					.filter((provider) => laufwerk.getProviderAuthStatus(provider.id).configured)
+					.map((provider) => provider.id),
+			);
+		} catch {
+			return [...modelle];
+		}
+		return modelle.filter((m) => !m.provider || konfiguriert.has(m.provider));
+	}
+
+	/** Modell-Liste für den Umschalter in der Fußleiste. */
+	private async modelListe(): Promise<void> {
+		const modelle = await this.verfuegbareModelle();
+		const aktivId = this.session.model?.id;
+		this.send({
+			type: "models",
+			modelle: modelle.map((m) => ({ id: m.id, provider: m.provider ?? "", aktiv: m.id === aktivId })),
+		});
+	}
+
+	/** Gewähltes Modell aktivieren — Fehlermeldung, wenn nicht im Katalog. */
+	private async modelSetzen(modelId: string): Promise<void> {
+		const modelle = await this.verfuegbareModelle();
+		const ziel = modelle.find((m) => m.id === modelId);
+		if (!ziel) {
+			this.send({
+				type: "notify",
+				level: "error",
+				message: `Modell „${modelId}“ ist nicht verfügbar (nur angemeldete Provider — ggf. unter »Konto« anmelden).`,
+			});
+			return;
+		}
+		try {
+			await this.session.setModel(ziel as never);
+		} catch (error) {
+			this.send({
+				type: "notify",
+				level: "error",
+				message: `Modellwechsel fehlgeschlagen: ${error instanceof Error ? error.message : String(error)}`,
+			});
+			return;
+		}
+		this.send({ type: "model_changed", model: this.session.model?.name ?? ziel.id });
+		this.sendeZustand();
+		await this.modelListe();
+	}
+
 	private async providerStatus(): Promise<void> {
 		const providers = this.session.modelRuntime.getProviders().map((provider) => {
 			const faehig = this.providerFaehigkeiten(provider);
@@ -591,6 +657,7 @@ export class HostedSession {
 			this.send({ type: "notify", level: "info", message: `${provider.name} ist angemeldet.` });
 			await this.modellDesProvidersAktivieren(providerId);
 			await this.providerStatus();
+			await this.modelListe();
 		} catch (error) {
 			this.send({
 				type: "notify",
@@ -612,6 +679,7 @@ export class HostedSession {
 			});
 		}
 		await this.providerStatus();
+		await this.modelListe();
 	}
 
 	/** Das erste verfügbare Modell des Providers aktiv setzen (wie in der IDE). */

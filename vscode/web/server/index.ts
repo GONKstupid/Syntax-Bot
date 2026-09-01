@@ -17,13 +17,15 @@
  */
 
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { readFile } from "node:fs/promises";
+import { readFile, rm } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer } from "ws";
 import { KontoStore } from "./accounts.ts";
+import { credentialDateiFuer } from "./konto-credentials.ts";
+import { kontoIdVon } from "./provider-store.ts";
 import {
 	clearSessionCookie,
 	clientIp,
@@ -41,6 +43,7 @@ import {
 	SessionHost,
 	type ClientMessage,
 	type HostedSession,
+	type SessionHostOptions,
 } from "./session-host.ts";
 
 const uiDir = join(dirname(fileURLToPath(import.meta.url)), "..", "ui");
@@ -87,6 +90,8 @@ interface ServerContext {
 	trustProxy: boolean;
 	/** Anonyme Nutzung nur, solange der Server ausschließlich lokal bindet. */
 	erlaubeAnonym: boolean;
+	/** Pfade der isolierten Instanz — für das Aufräumen beim Konto-Löschen. */
+	host: SessionHostOptions;
 }
 
 function parseArgs(argv: string[]): { port: number; host: string } {
@@ -242,6 +247,75 @@ function behandleAbmelden(context: ServerContext, request: IncomingMessage, resp
 	response.end();
 }
 
+/** Angemeldeter Nutzer aus dem Cookie — sonst 401-Antwort. */
+function nutzerOder401(
+	context: ServerContext,
+	request: IncomingMessage,
+	response: ServerResponse,
+): { token: string; nutzer: WebUser } | null {
+	const token = parseCookieHeader(request.headers.cookie)[SESSION_COOKIE_NAME];
+	const nutzer = context.sessions.get(token)?.user;
+	if (!nutzer) {
+		antworteJson(response, 401, { fehler: "Nicht angemeldet." });
+		return null;
+	}
+	return { token, nutzer };
+}
+
+async function behandlePasswortAendern(context: ServerContext, request: IncomingMessage, response: ServerResponse): Promise<void> {
+	const anmeldung = nutzerOder401(context, request, response);
+	if (!anmeldung) return;
+
+	let felder: Record<string, string>;
+	try {
+		felder = await leseKoerper(request);
+	} catch (error) {
+		return antworteJson(response, 400, { fehler: error instanceof Error ? error.message : String(error) });
+	}
+
+	try {
+		await context.kontos.passwortAendern(anmeldung.nutzer.id, felder.passwortAlt ?? "", felder.passwortNeu ?? "");
+		// Nach dem Wechsel sind alle anderen Sitzungen ungültig — diese bleibt.
+		context.sessions.deleteForUser(anmeldung.nutzer.id, anmeldung.token);
+		antworteJson(response, 200, { ok: true });
+	} catch (error) {
+		antworteJson(response, 400, { fehler: error instanceof Error ? error.message : String(error) });
+	}
+}
+
+async function behandleKontoLoeschen(context: ServerContext, request: IncomingMessage, response: ServerResponse): Promise<void> {
+	const anmeldung = nutzerOder401(context, request, response);
+	if (!anmeldung) return;
+
+	let felder: Record<string, string>;
+	try {
+		felder = await leseKoerper(request);
+	} catch (error) {
+		return antworteJson(response, 400, { fehler: error instanceof Error ? error.message : String(error) });
+	}
+
+	// Löschung nur mit korrektem Passwort — schützt vor fremden Händen am Rechner.
+	try {
+		await context.kontos.anmelden(anmeldung.nutzer.login, felder.passwort ?? "");
+	} catch {
+		return antworteJson(response, 401, { fehler: "Das Passwort ist falsch — das Konto bleibt bestehen." });
+	}
+
+	const kontoId = kontoIdVon(anmeldung.nutzer);
+	await context.host.threads.loescheAlle(kontoId);
+	await context.host.providers.loescheAlle(kontoId);
+	await rm(credentialDateiFuer(context.host.credentialsDir, kontoId), { force: true }).catch(() => {
+		// Fehlende Datei ist kein Fehler.
+	});
+	const bereich = join(context.host.workspacesDir, `nutzer-${anmeldung.nutzer.id.replace(/[^a-zA-Z0-9_-]/g, "")}`);
+	await rm(bereich, { recursive: true, force: true }).catch(() => {
+		// Ohne Arbeitsbereich gibt es nichts zu entfernen.
+	});
+	await context.kontos.loeschen(anmeldung.nutzer.id);
+	context.sessions.deleteForUser(anmeldung.nutzer.id);
+	antworteJson(response, 200, { ok: true }, { "set-cookie": clearSessionCookie(context.auth.secureCookie) });
+}
+
 /* --- Hauptprogramm --------------------------------------------------------- */
 
 async function main(): Promise<void> {
@@ -273,6 +347,7 @@ async function main(): Promise<void> {
 		rateCounter: new Map(),
 		trustProxy: process.env.SYNTAX_BOT_TRUST_PROXY === "1",
 		erlaubeAnonym,
+		host: options,
 	};
 	const sessionHost = new SessionHost(options);
 
@@ -287,6 +362,12 @@ async function main(): Promise<void> {
 				return void behandleAnmelden(context, request, response).catch(() => antworteText(response, 500, "Serverfehler bei der Anmeldung."));
 			}
 			if (pfad === "/auth/logout") return behandleAbmelden(context, request, response);
+			if (pfad === "/auth/password" && request.method === "POST") {
+				return void behandlePasswortAendern(context, request, response).catch(() => antworteText(response, 500, "Serverfehler beim Passwort-Wechsel."));
+			}
+			if (pfad === "/auth/delete" && request.method === "POST") {
+				return void behandleKontoLoeschen(context, request, response).catch(() => antworteText(response, 500, "Serverfehler beim Löschen des Kontos."));
+			}
 
 			const nutzer = userFromRequest(context, request);
 			// Ohne Konto und ohne anonyme Freigabe kommt nur die Anmeldeseite

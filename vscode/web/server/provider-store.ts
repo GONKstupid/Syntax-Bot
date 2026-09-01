@@ -96,4 +96,12 @@ export class ProviderStore {
 		const liste = await this.liste(kontoId);
 		return liste[0];
 	}
+
+	/** Alle gespeicherten Provider eines Kontos entfernen (Konto-Löschung). */
+	async loescheAlle(kontoId: string): Promise<void> {
+		const alle = await this.lesen();
+		if (!(kontoId in alle)) return;
+		delete alle[kontoId];
+		await this.schreiben(alle);
+	}
 }

@@ -145,4 +145,33 @@ export class KontoStore {
 		}
 		return konto;
 	}
+
+	/**
+	 * Ändert das Passwort eines Kontos — nur mit korrektem altem Passwort.
+	 * Neues Salt pro Änderung; Fehlermeldung deutsch wie bei registrieren().
+	 */
+	async passwortAendern(kontoId: string, alt: string, neu: string): Promise<void> {
+		const konten = await this.lesen();
+		const konto = konten.find((k) => k.id === kontoId);
+		if (!konto) throw new Error("Konto nicht gefunden.");
+		const altBerechnet = await hashPasswort(alt, konto.passwortSalt);
+		if (!pruefeHash(konto.passwortHash, altBerechnet)) {
+			throw new Error("Das aktuelle Passwort ist falsch.");
+		}
+		if (neu.length < 8) {
+			throw new Error("Das neue Passwort muss mindestens 8 Zeichen lang sein.");
+		}
+		konto.passwortSalt = randomBytes(16).toString("hex");
+		konto.passwortHash = await hashPasswort(neu, konto.passwortSalt);
+		await this.schreiben(konten);
+	}
+
+	/** Entfernt ein Konto endgültig aus dem Store (Aufräumen der Daten liegt beim Aufrufer). */
+	async loeschen(kontoId: string): Promise<boolean> {
+		const konten = await this.lesen();
+		const gefiltert = konten.filter((konto) => konto.id !== kontoId);
+		if (gefiltert.length === konten.length) return false;
+		await this.schreiben(gefiltert);
+		return true;
+	}
 }
