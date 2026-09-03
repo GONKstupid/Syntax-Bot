@@ -1,7 +1,7 @@
 /**
  * Modus „Cleanup" — nur Struktur und Formatierung, garantiert keine
- * Logikänderung. Maßstab ist der Linux-Kernel-Coding-Style, der als Asset
- * neben dieser Datei liegt.
+ * Logikänderung. Maßstab ist eine eigene, kurze Zusammenfassung etablierter
+ * Formatierungsregeln im Prompt-Fragment (keine externe Stildatei).
  */
 
 import { dirname, join } from "node:path";
@@ -12,7 +12,6 @@ import { registerMode } from "../shared/mode-core.ts";
 
 const extensionDir = dirname(fileURLToPath(import.meta.url));
 const promptsDir = join(extensionDir, "..", "shared", "prompts");
-const stylePath = join(extensionDir, "styles", "linux-kernel-coding-style.rst");
 
 export default function cleanupExtension(pi: ExtensionAPI): void {
 	registerMode(pi, {
@@ -30,6 +29,5 @@ export default function cleanupExtension(pi: ExtensionAPI): void {
 		bash: { kind: "allowlist", label: "Formatter und Linter", patterns: FORMATTER_ALLOWLIST },
 
 		promptPath: join(promptsDir, "cleanup.md"),
-		promptVariables: { STYLE_PATH: stylePath },
 	});
 }

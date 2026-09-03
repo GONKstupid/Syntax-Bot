@@ -27,17 +27,11 @@ beeinflusst, ist die Antwort immer: nicht ändern.
 - Typen ändern, Casts entfernen, Defaults ergänzen.
 - Import-Reihenfolge ändern, wenn Importe Seiteneffekte haben können.
 
-## Stilquelle
+## Stilgrundlage
 
-Maßstab ist der Coding-Style des Linux-Kernels. Die vollständige Fassung liegt
-im Repository unter:
-
-    {{STYLE_PATH}}
-
-Lies diese Datei mit dem `read`-Werkzeug, bevor du Stilentscheidungen
-begründest — zitiere daraus, statt aus dem Gedächtnis zu argumentieren.
-
-Die Kernpunkte, kurz:
+Maßstab ist eine eigene, kurze Zusammenfassung etablierter Formatierungsregeln
+— eine externe Stildatei wird nicht gebraucht. Begründe Stilentscheidungen mit
+diesen Kernpunkten:
 
 1. Tiefe Verschachtelung ist ein Zeichen für ein Strukturproblem — im Cleanup
    benennst du es, behebst es aber nicht.

@@ -5,6 +5,7 @@
 	"version": "0.4.0",
 	"publisher": "syntax-bot",
 	"license": "SEE LICENSE",
+	"icon": "media/icon.png",
 	"private": true,
 	"engines": {
 		"vscode": "^1.85.0"

@@ -1,6 +1,8 @@
 # Syntax Bot — Projektübergabe (HANDOFF)
 
-**Stand: 2026-09-01 · Konto-Nacharbeiten II Web: Modell-Umschalter listet jetzt alle verfügbaren Modelle angemeldeter Provider (WS `model_list`/`model_set`, Filter wie verfuegbareModelle() im IDE-Adapter); Passwort ändern (`POST /auth/password`, andere Sitzungen fliegen) und Konto löschen (`POST /auth/delete` mit Passwort-Bestätigung — räumt Threads samt Session-Dateien, Provider, Credentials und Arbeitsbereich auf) über die Konto-Seite; Senden-Knopf nur noch Icon in Fußleisten-Höhe; 135 Tests grün**
+**Stand: 2026-09-03 · Cleanup-Stilquelle entfernt: die GPL-2.0-lizenzierte `linux-kernel-coding-style.rst` (ursprünglich nur als Beispiel gedacht) ist samt `STYLE-SOURCE.md` und `scripts/update-coding-style.sh` raus; der Cleanup-Modus stützt sich jetzt auf die eigene 7-Punkte-Zusammenfassung im Prompt (`cleanup.md`, `{{STYLE_PATH}}` entfernt). Betroffen: `cleanup/index.ts` (stylePath/promptVariables weg), `modes.test.ts` (Test auf „keine Stilquellen-Datei" gedreht), `package.json` (`update-style`-Script weg), README + Spec nachgezogen. Entfernt die GPL-Belastung für die Distribution (VSIX/Marketplace — Nutzer wählt Veröffentlichungsweg „Option B"). Tests grün.**
+
+> **Stand: 2026-09-01 · Konto-Nacharbeiten II Web: Modell-Umschalter listet jetzt alle verfügbaren Modelle angemeldeter Provider (WS `model_list`/`model_set`, Filter wie verfuegbareModelle() im IDE-Adapter); Passwort ändern (`POST /auth/password`, andere Sitzungen fliegen) und Konto löschen (`POST /auth/delete` mit Passwort-Bestätigung — räumt Threads samt Session-Dateien, Provider, Credentials und Arbeitsbereich auf) über die Konto-Seite; Senden-Knopf nur noch Icon in Fußleisten-Höhe; 135 Tests grün**
 
 > **Stand: 2026-09-01 · Konto-Nacharbeiten Web: Ursache für „Unbekannter Fehler" und leere Anbieterlisten war ein veralteter Serverprozess auf 4711 (alter Code vor dem Konto-Umbau) — neu gestartet; Onboarding-Seite 5 listet jetzt die drei Anmeldewege explizit mit Knopf zur Konto-Seite; Registrierung mit Passwort-Bestätigung; „anzeigen/verbergen“-Knöpfe an den Passwortfeldern (Login + Registrierung); Fehleranzeige zeigt HTTP-Status statt „Unbekannter Fehler"; Anbieterlisten live geprüft: 39 API-Key- + 7 Browser-Anbieter (wie in der IDE); 131 Tests grün**
 
@@ -74,7 +76,7 @@ Dazu `/modus` (Stand anzeigen) und `/modus-aus` (Modus beenden).
 
 **Entscheidungen:**
 *   **Modelle:** Die Wahl des LLM (API, Subscription, Lokal) wird vollständig an das Pi-Provider-System delegiert.
-*   **Stilquelle für Cleanup:** Linux-Kernel `coding-style.rst` (als Repo-Asset, gepinnt).
+*   **Stilgrundlage für Cleanup:** eigene 7-Punkte-Zusammenfassung etablierter Formatierungsregeln im Prompt (die frühere Kernel-`coding-style.rst` wurde 2026-09-03 entfernt — GPL-2.0, ursprünglich nur als Beispiel gedacht).
 *   **Update-Trigger:** bei jedem Start.
 *   **Web-Reichweite (neu fixiert, 2026-09-01):** Der Web-Agent ist als **Chat-Interface für die lokale Entwicklung** umgesetzt (Entscheidung: **kein öffentliches Hosting**) — weiterhin **BYOM** („bring your own model"): Jeder Nutzer bringt sein eigenes Modell mit (eigener API-Key oder lokaler Endpunkt, OpenAI-kompatibel: Ollama, LM Studio, llama.cpp). Der Server selbst rechnet nichts ab.
 *   **Onboarding & Konto (fixiert, 2026-09-01):** 5-Seiten-Onboarding (Was ist Syntax Bot, Syntax Fix, Code Fix, Cleanup, Modell verbinden) beim ersten Besuch, erneut über das ⋯-Menü (»Hilfe«).
@@ -138,8 +140,9 @@ Dazu `/modus` (Stand anzeigen) und `/modus-aus` (Modus beenden).
 
 ```
 syntax-bot/
-├── Syntax-Bot-Specification.md   ← Quelle der Wahrheit
-├── HANDOFF.md                    ← diese Datei
+├── Docs/
+│   ├── Syntax-Bot-Specification.md ← Quelle der Wahrheit
+│   └── HANDOFF.md                  ← diese Datei
 ├── README.md                     ← Benutzung
 ├── package.json                  ← Pi-Paket-Manifest, „web"-Skript
 ├── extensions/
@@ -149,7 +152,7 @@ syntax-bot/
 │   │   └── prompts/{syntax-fix,code-fix,cleanup}.md
 │   ├── syntax-fix/index.ts
 │   ├── code-fix/index.ts
-│   └── cleanup/index.ts + styles/
+│   └── cleanup/index.ts
 ├── vscode/
 │   ├── src/ + media/             ← eigenständige VS-Code-Extension (Webview-Chat, esbuild)
 │   ├── web/
@@ -161,7 +164,7 @@ syntax-bot/
 │   └── *.vsix                    ← gebaute Extension-Pakete (0.3.0, 0.4.0)
 ├── ide/                          ← ACP-Adapter (Zed/VS-Code-ACP-Clients)
 ├── design/                       ← tokens.json, STYLE-SOURCE.md
-├── scripts/                      ← bootstrap.mjs, syntax-bot.*, update-pi.*, update-coding-style.sh
+├── scripts/                      ← bootstrap.mjs, syntax-bot.*, update-pi.*
 └── test/                         ← 135 Tests + web-smoke.mjs
 ```
 
@@ -224,7 +227,7 @@ syntax-bot/
 
 ## 5. Offene Punkte (Entscheidungsbedarf)
 
-1.  **Lizenz und Repo-Sichtbarkeit.** Die mitgelieferte Kernel-Stilquelle steht unter **GPL-2.0**. Solange sie im Repo liegt, hängt daran, welche Lizenz Syntax Bot selbst haben kann. Alternativen: (a) GPL-kompatibel lizenzieren, (b) Datei erst beim ersten Start herunterladen, (c) eigene frei formulierte Stilzusammenfassung.
+1.  **Lizenz und Repo-Sichtbarkeit.** ~~Die mitgelieferte Kernel-Stilquelle steht unter GPL-2.0.~~ **Entschärft (2026-09-03):** Die GPL-2.0-`coding-style.rst` ist entfernt; der Cleanup-Modus nutzt eine eigene Stilzusammenfassung im Prompt (Alternative (c)). Damit hängt keine GPL-Belastung mehr an der Distribution (VSIX/Marketplace). Offen bleibt die grundsätzliche Lizenzwahl für den Rest des Repos.
 2.  **UI-Sprache.** Vorläufig gesetzt: Modus-Commands englisch (`/syntax-fix`, spec-fixiert), Kern-Commands und Texte deutsch, der Agent antwortet in der Sprache des Nutzers. Für eine Veröffentlichung wäre Englisch als Grundsprache mit deutscher Übersetzung der sauberere Weg.
 3.  **Web-Betrieb:** Die Konto-/Provider-/Thread-Umsetzung ist auf localhost automatisch geprüft (Unit + Smoke); der Browser-OAuth-Durchlauf eines echten Anbieters (Claude Pro/Max o. ä.) braucht ein echtes Abo und ist manuell zu testen. Umgebungsvariablen: `SYNTAX_BOT_PUBLIC_BIND=1` (Binden ins Netz), `SYNTAX_BOT_SECURE=1` (Cookie mit Secure, hinter HTTPS-Proxy), `SYNTAX_BOT_TRUST_PROXY=1` (X-Forwarded-For auswerten), `SYNTAX_BOT_MAX_SESSIONS` (parallele WS je Nutzer).
 4.  ~~Design-Assets vervollständigen~~ — **erledigt (2026-08-23):** Schriften liegen unter `web/ui/fonts/` (Prüfsummen in `design/STYLE-SOURCE.md`), der Token-Generator läuft per `npm run tokens`. OpenDyslexic-Umschaltung war eingebaut und wurde 2026-09-01 auf Nutzerwunsch wieder entfernt. Offen bleibt nur die Icon-Satz-Wahl (Lucide vs. Phosphor) — aktuell braucht die UI keine Icons.

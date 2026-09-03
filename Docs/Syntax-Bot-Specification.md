@@ -24,9 +24,8 @@ Syntax Bot soll verschiedene Modi haben:
    reduziert Fehler.
 3. **Cleanup** — ändert den Code inhaltlich nicht (keine Logikänderungen
    o. Ä.), sondern verbessert ausschließlich die Struktur. Orientiert sich
-   dabei an den Regeln für sauberen Code von Linus Torvalds für den
-   Linux-Kernel (`coding-style.rst`,
-   https://github.com/torvalds/linux/blob/master/Documentation/process/coding-style.rst).
+   dabei an einer eigenen, kurzen Zusammenfassung etablierter
+   Formatierungsregeln (im Prompt-Fragment, keine externe Stildatei).
 
 Die drei Modi sollen als Pi-Agent-Extensions umgesetzt werden. Das heißt, man
 würde z. B. `/syntax-fix` eingeben, um den Modus zu triggern, und müsste
@@ -94,17 +93,17 @@ Verhaltensprofilen.
   installieren (Syntax Bot übersetzt die Anfrage in `pi install …`).
 - **Diff-Vorschau vor jeder Änderung** — der Agent schreibt nie ungefragt in
   Dateien.
-- **Cleanup-Stilquelle** (`coding-style.rst`, Linux-Kernel) wird als
-  Repo-Asset mitgeliefert statt als lokaler Pfad referenziert.
+- **Cleanup-Stilgrundlage** ist eine eigene, kurze Zusammenfassung etablierter
+  Formatierungsregeln im Prompt-Fragment — keine externe Stildatei.
 
 ### Out (explizit, für v1)
 
 - Cloud-Sync oder Backend für Syntax-Bot-eigene Daten — Zustand lebt lokal
   (analog zu Pis `~/.pi/agent/`).
 - Vollautomatisches Anwenden von Änderungen ohne Bestätigung.
-- Weitere Stilquellen für `Cleanup` jenseits des Linux-Kernel-Stils
-  (z. B. PEP8, Google Style Guides) — später möglich, v1 bleibt bei einer
-  Quelle.
+- Weitere Stilquellen für `Cleanup` jenseits der eigenen
+  Formatierungs-Zusammenfassung (z. B. PEP8, Google Style Guides) — später
+  möglich, v1 bleibt bei einer Grundlage.
 - Eigenes/fine-getuntes Modell — Modellwahl läuft ausschließlich über die
   Pi-Provider-Abstraktion.
 - Telemetrie/Analytics.
@@ -212,8 +211,8 @@ Session wiederhergestellt. `/modus` zeigt den Stand, `/modus-aus` beendet ihn.
 
 - Sessions analog zu `~/.pi/agent/sessions/`, aber unter dem eigenen
   Syntax-Bot-Home-Verzeichnis.
-- Konfiguration: Standardmodus, Standard-Modell/-Provider, Pfad zur
-  Cleanup-Stilquelle, Diff-Vorschau an/aus, Auto-Update an/aus.
+- Konfiguration: Standardmodus, Standard-Modell/-Provider, Diff-Vorschau
+  an/aus, Auto-Update an/aus.
 
 ### Sicherheit / Leitplanken
 
@@ -254,7 +253,7 @@ Welcher Code soll bereinigt werden?
 > @src/parser.c
 
 [Diff-Vorschau: Einrückung, Klammernstil, Zeilenlänge
- gemäß Linux-Kernel coding-style.rst]
+ gemäß Cleanup-Stilgrundlage]
 
 Änderungen übernehmen? [y/n]
 ```
@@ -283,12 +282,8 @@ Alternativen. Es werden **keine** geschützten Nothing-Assets übernommen; die
   Produktschriftzug werden nicht verwendet; Syntax Bot hat eine eigene
   Wortmarke (schlicht: `SYNTAX·BOT`, gesetzt in der Display-Schrift).
 - **Erlaubte Eingangs-Lizenzen für alle Design-Assets:** MIT, SIL OFL,
-  Apache-2.0, CC0. Für jedes übernommene Asset wird die Herkunft dokumentiert
-  (analog zu `extensions/cleanup/styles/STYLE-SOURCE.md`).
-- **Achtung Abgrenzung:** Die bereits gebündelte Cleanup-Stilquelle
-  (`coding-style.rst`, GPL-2.0) ist eine Text-/Datenquelle, kein UI-Asset —
-  sie berührt dieses Designkapitel nicht. Die offene Lizenzfrage des Repos
-  bleibt davon unabhängig bestehen.
+  Apache-2.0, CC0. Für jedes übernommene Asset wird die Herkunft in
+  `design/STYLE-SOURCE.md` dokumentiert.
 
 ### Farbpalette (Tokens)
 
@@ -388,26 +383,22 @@ Cleanup     ◐◐◐   (Umriss-Punkte: Zugriff, aber harte Logik-Grenze)
 - Alle Tokens liegen in einer Datei `design/tokens.json` (MIT); Web und CLI
   generieren daraus ihre jeweiligen Formate (CSS-Variablen bzw. ANSI-Tabelle).
 - Jede übernommene Schrift/Icon-Quelle wird mit Lizenz und Herkunft in
-  `design/STYLE-SOURCE.md` dokumentiert — gleiches Prozedere wie bei der
-  Cleanup-Stilquelle.
+  `design/STYLE-SOURCE.md` dokumentiert.
 
 ---
 
-## Cleanup — Stilquelle
+## Cleanup — Stilgrundlage
 
-- Wird gebündelt als Repo-Asset ausgeliefert:
-  `extensions/cleanup/styles/linux-kernel-coding-style.rst`, gespiegelt von
-  https://github.com/torvalds/linux/blob/master/Documentation/process/coding-style.rst.
-- **Nicht** als lokaler Pfad (`C:\Users\...\coding-style.rst`) referenziert —
-  der ursprüngliche Pfad existiert nur auf einem Rechner und wäre in einem
-  geteilten Repo/Paket nicht nutzbar.
-- Version wird gepinnt: `styles/STYLE-SOURCE.md` hält Upstream-URL, Zeilenzahl,
-  SHA-256 und Commit fest. `scripts/update-coding-style.sh` gleicht gegen den
-  Upstream ab, zeigt standardmäßig nur den Diff und schreibt die Kennzahlen erst
-  mit `--apply` zurück.
-- **Lizenzhinweis:** Die Kernel-Dokumentation steht unter GPL-2.0. Solange die
-  Datei mitgeliefert wird, hängt die offene Lizenzfrage des Repos daran.
-- v1 nutzt diesen Stil sprachübergreifend als allgemeine
+- Maßstab ist eine eigene, kurze Zusammenfassung etablierter
+  Formatierungsregeln, gebündelt im Prompt-Fragment
+  `extensions/shared/prompts/cleanup.md`. Keine externe Stildatei, kein
+  Update-Skript.
+- **Hintergrund:** Früher lag hier die Linux-Kernel-`coding-style.rst`
+  (GPL-2.0) als Repo-Asset. Sie war ursprünglich nur als Beispiel gedacht und
+  wurde entfernt — damit entfällt die GPL-Belastung für die Distribution
+  (u. a. die gebündelte VS-Code-VSIX). Der Cleanup-Modus stützt sich jetzt
+  auf die eigene Zusammenfassung im Prompt.
+- v1 nutzt diese Regeln sprachübergreifend als allgemeine
   „sauberer Code"-Philosophie, nicht nur für C — siehe offene Punkte.
 
 ---
@@ -416,8 +407,9 @@ Cleanup     ◐◐◐   (Umriss-Punkte: Zugriff, aber harte Logik-Grenze)
 
 ```
 syntax-bot/
-├── Syntax-Bot-Specification.md   ← diese Datei
-├── HANDOFF.md
+├── Docs/
+│   ├── Syntax-Bot-Specification.md ← diese Datei
+│   └── HANDOFF.md
 ├── README.md
 ├── package.json                  ← Pi-Paket-Manifest (pi.extensions)
 ├── extensions/
@@ -431,22 +423,18 @@ syntax-bot/
 │   ├── syntax-fix/index.ts
 │   ├── code-fix/index.ts
 │   └── cleanup/
-│       ├── index.ts
-│       └── styles/
-│           ├── linux-kernel-coding-style.rst
-│           └── STYLE-SOURCE.md   ← Herkunft, Prüfsumme, Lizenz
+│       └── index.ts
 ├── web/                          ← Standalone Web-Agent
 │   ├── server/                   ← index.ts (HTTP+WS), session-host.ts,
 │   │                               ui-bridge.ts, jail-extension.ts,
 │   │                               auth.ts, byom.ts
 │   └── ui/                       ← index.html, app.js, style.css
-├── design/                       ← tokens.json, STYLE-SOURCE.md
+├── design/                       ← tokens.json, STYLE-SOURCE.md, icon-512.png
 ├── ide/                          ← Zed / VS Code (offen)
 ├── scripts/
 │   ├── bootstrap.mjs             ← isolierte Instanz einrichten/aktualisieren
 │   ├── syntax-bot.sh / .ps1      ← Start
-│   ├── update-pi.sh / .ps1       ← Versionsprüfung
-│   └── update-coding-style.sh    ← Stilquelle gegen Upstream abgleichen
+│   └── update-pi.sh / .ps1       ← Versionsprüfung
 └── test/
 ```
 
@@ -469,7 +457,7 @@ Code nicht als vierte Extension lädt. Zusätzlich sind die vier Extensions in
 | Modellwahl | Frei: API-Key, Subscription oder lokales Modell |
 | Paket-Kompatibilität | Volle Pi-Ökosystem-Kompatibilität (Extensions, Skills, Prompt-Templates) |
 | Änderungen anwenden | Immer mit Diff-Vorschau, nie automatisch |
-| Cleanup-Stilquelle | Linux-Kernel `coding-style.rst`, als Repo-Asset gebündelt |
+| Cleanup-Stilgrundlage | Eigene Zusammenfassung etablierter Formatierungsregeln im Prompt — keine externe Stildatei |
 | Cleanup-Grenze | Keine Logikänderungen, nur Struktur/Formatierung |
 | UI-Design | Monochrome, von Nothing inspirierte Ästhetik mit einem roten Akzent; ausschließlich offene Lizenzen (MIT / OFL / Apache-2.0 / CC0), keine Nothing-Assets oder -Fonts |
 | Web-Reichweite | Öffentlich erreichbarer Chat; öffentliches Binden nur mit `SYNTAX_BOT_PUBLIC_BIND=1` |
@@ -481,8 +469,8 @@ Code nicht als vierte Extension lädt. Zusätzlich sind die vier Extensions in
 
 ## Entscheidungen — Offen
 
-- Weitere Stilquellen für `Cleanup` jenseits des Linux-Kernel-Stils
-  (PEP8, Google Style Guides, …).
+- Weitere Stilquellen für `Cleanup` jenseits der eigenen
+  Formatierungs-Zusammenfassung (PEP8, Google Style Guides, …).
 - ~~Genauer Update-Trigger für „immer neueste Pi-Version"~~ — **entschieden:**
   bei jedem Start, abschaltbar über `SYNTAX_BOT_NO_UPDATE=1`. Eine tägliche
   Hintergrundprüfung wäre eine Optimierung für Phase 3, kein v1-Thema.

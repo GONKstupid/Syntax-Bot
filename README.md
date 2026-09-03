@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="design/icon-512.png" alt="Syntax Bot" width="128" height="128">
+</p>
+
 # Syntax Bot
 
 Ein Coding-Agent auf Basis des [Pi Agent](https://github.com/earendil-works/pi),
@@ -6,8 +10,8 @@ einzumischen**. Gedacht als Hilfsmittel bei einer Lese-Rechtschreib-Schwäche
 (LRS): Beim Programmieren soll der Gedanke zählen, nicht die Rechtschreibung.
 
 Die vollständige Architektur steht in
-[`Syntax-Bot-Specification.md`](Syntax-Bot-Specification.md), der aktuelle
-Arbeitsstand in [`HANDOFF.md`](HANDOFF.md).
+[`Syntax-Bot-Specification.md`](Docs/Syntax-Bot-Specification.md), der aktuelle
+Arbeitsstand in [`HANDOFF.md`](Docs/HANDOFF.md).
 
 ## Die drei Modi
 
@@ -135,17 +139,13 @@ ausdrücklich nach**. Pi-Pakete laufen mit vollem Systemzugriff — die Rückfra
 lässt sich nicht abschalten. Neue Extensions werden nach `/reload` oder einem
 Neustart aktiv.
 
-## Cleanup-Stilquelle
+## Cleanup-Stilgrundlage
 
-Maßstab für `/cleanup` ist der Coding-Style des Linux-Kernels. Die Datei liegt
-als Repo-Asset unter `extensions/cleanup/styles/`; Herkunft, Prüfsumme und
-Lizenz stehen in
-[`extensions/cleanup/styles/STYLE-SOURCE.md`](extensions/cleanup/styles/STYLE-SOURCE.md).
-
-```bash
-bash scripts/update-coding-style.sh          # Diff gegen den Upstream zeigen
-bash scripts/update-coding-style.sh --apply  # übernehmen
-```
+Maßstab für `/cleanup` ist eine eigene, kurze Zusammenfassung etablierter
+Formatierungsregeln — gebündelt im Prompt-Fragment
+`extensions/shared/prompts/cleanup.md`. Eine externe Stildatei wird nicht
+mitgeliefert (die frühere, GPL-2.0-lizenzierte Kernel-`coding-style.rst` ist
+entfernt).
 
 ## Syntax Bot in Zed (IDE-Anbindung)
 
@@ -287,4 +287,4 @@ Konto-System/BYOM/Thread-History) läuft, die IDE-Anbindung ist für Zed nativ u
 die Community-Extension „ACP Client“ umgesetzt. Offen sind
 die Vertiefung der IDE-Anbindung (Kontext wie offene Datei/Selektion)
 sowie eine formale Prüfung der Logik-Unveränderlichkeit im
-Cleanup-Modus — Details in `HANDOFF.md`.
+Cleanup-Modus — Details in `Docs/HANDOFF.md`.

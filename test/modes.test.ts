@@ -117,10 +117,10 @@ describe("Cleanup-Modus", () => {
 		assert.equal(stub.getActiveTools().includes("write"), false);
 	});
 
-	it("nennt im Prompt den Pfad zur Stilquelle", async () => {
+	it("liefert den Cleanup-Prompt ohne Stilquellen-Dateiverweis", async () => {
 		await activate(stub, "cleanup");
 		const result = await stub.emitFirst("before_agent_start", { prompt: "x", systemPrompt: "BASIS" });
-		assert.match(result.systemPrompt, /linux-kernel-coding-style\.rst/);
+		assert.doesNotMatch(result.systemPrompt, /linux-kernel-coding-style\.rst/);
 		assert.doesNotMatch(result.systemPrompt, /\{\{STYLE_PATH\}\}/);
 	});
 });
