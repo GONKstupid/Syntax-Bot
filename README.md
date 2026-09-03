@@ -263,7 +263,7 @@ extensions/
 ├── shared/       gemeinsamer Modus-Kern, Bash-Allowlist, Prompt-Fragmente
 ├── syntax-fix/   Modus „Syntax Fix"
 ├── code-fix/     Modus „Code Fix"
-└── cleanup/      Modus „Cleanup" samt Stilquelle
+└── cleanup/      Modus „Cleanup"
 scripts/          Bootstrap, Start, Update
 test/             Tests für Modus-Grenzen und Leitplanken
 ```
@@ -288,3 +288,9 @@ die Community-Extension „ACP Client“ umgesetzt. Offen sind
 die Vertiefung der IDE-Anbindung (Kontext wie offene Datei/Selektion)
 sowie eine formale Prüfung der Logik-Unveränderlichkeit im
 Cleanup-Modus — Details in `Docs/HANDOFF.md`.
+
+## Lizenz
+
+MIT — siehe [`LICENSE`](LICENSE). Die Extension bündelt Open-Source-Komponenten
+(u. a. die MIT-lizenzierte Pi-Laufzeit und `photon-node` unter Apache-2.0);
+Details in den [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md).

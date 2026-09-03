@@ -2,6 +2,5 @@ src
 esbuild.mjs
 node_modules
 **/*.ts
-*.md
 .vscode
 *.vsix

@@ -6,7 +6,7 @@
  *
  * Es entsteht vscode/dist/ mit
  *   extension.js     — der komplette Extension-Code inkl. Pi-Laufzeit und ACP-Adapter (gebündelt)
- *   pi-package/      — Kopie von extensions/ (die Pi-Extensions samt Prompts und Stilquelle)
+ *   pi-package/      — Kopie von extensions/ (die Pi-Extensions samt Prompts)
  *   node_modules/    — Pakete, die zur Laufzeit als Datei daneben liegen müssen (photon WASM)
  *
  * Bewusst gebündelt statt installiert: Auf Ziel-Rechnern (Schule) gibt es kein
@@ -27,7 +27,7 @@ mkdirSync(dist, { recursive: true });
 
 // Die Pi-Extensions brauchen wir als echte Dateien — Pi lädt sie über den
 // Pfad in settings.json ("packages"). Das Paket-Manifest (pi.extensions) und
-// die Prompts/Stilquelle werden zur Laufzeit gelesen.
+// die Prompts werden zur Laufzeit gelesen.
 cpSync(join(hier, "..", "extensions"), join(dist, "pi-package", "extensions"), { recursive: true });
 cpSync(join(hier, "..", "package.json"), join(dist, "pi-package", "package.json"));
 
