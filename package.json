@@ -27,6 +27,7 @@
   },
   "scripts": {
     "start": "bash scripts/syntax-bot.sh",
+    "setup": "node scripts/bootstrap.mjs && node test/link-deps.mjs",
     "web": "node vscode/web/server/index.ts",
     "ide": "node ide/index.ts",
     "build:vscode": "node vscode/esbuild.mjs",

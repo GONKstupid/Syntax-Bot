@@ -31,16 +31,55 @@ wiederhergestellt.
 
 Voraussetzung: **Node.js 22.19 oder neuer**.
 
-```bash
-# Windows
-.\scripts\syntax-bot.ps1
+### Erste Schritte
 
-# Linux / macOS
-bash scripts/syntax-bot.sh
+```bash
+# Repository klonen und ins Verzeichnis wechseln
+git clone https://github.com/GONKstupid/Syntax-Bot.git
+cd Syntax-Bot
+
+# Abhängigkeiten installieren
+npm install
+
+# Pi-Runtime installieren und Entwicklungsumgebung einrichten
+npm run setup
 ```
 
-Der erste Start richtet alles ein. Alle weiteren Argumente werden an Pi
-durchgereicht, z. B. `.\scripts\syntax-bot.ps1 --model anthropic/claude-sonnet-5`.
+`npm run setup` richtet die isolierte Pi-Instanz ein (`~/.syntax-bot/runtime/`) und verlinkt die Peer-Abhängigkeiten (`ws`, `typebox`, Pi-Pakete) in `node_modules/`.
+
+Danach stehen die folgenden Befehle bereit:
+
+```bash
+# Web-Server starten
+npm run web
+
+# IDE-Adapter starten (für Zed / VS Code über ACP)
+npm run ide
+```
+
+Die Start-Skripte (`scripts/syntax-bot.ps1` bzw. `.sh`) führen den Bootstrap automatisch aus — dort genügt ein einmaliger Aufruf.
+
+### Windows
+
+```powershell
+# Einmalige Einrichtung
+.\scripts\syntax-bot.ps1
+
+# Web-Server starten
+npm run web
+```
+
+### Linux / macOS
+
+```bash
+# Einmalige Einrichtung
+bash scripts/syntax-bot.sh
+
+# Web-Server starten
+npm run web
+```
+
+Alle weiteren Argumente werden an Pi durchgereicht, z. B. `.\scripts\syntax-bot.ps1 --model anthropic/claude-sonnet-5`.
 
 ### Eigene, isolierte Instanz
 
