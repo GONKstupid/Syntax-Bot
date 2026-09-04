@@ -26,6 +26,24 @@ LICENSE-Datei des Pakets.
 - **ws** (MIT) — WebSocket-Transport (Web-/ACP-Betriebsart).
 - **photon-node** (Apache-2.0) — Bildverarbeitung (WASM), von Pi genutzt.
 
+## Gebündelte Schriften (SIL OFL 1.1)
+
+Web-UI und VS-Code-Extension liefern folgende Schriften als `.woff2` mit aus
+(`vscode/web/ui/fonts/`, `vscode/media/fonts/`); die GitHub-Pages-Seite
+(`docs/index.html`) lädt dieselben Schriften per Google-Fonts-CDN (keine
+Mitverteilung dort). Alle drei stehen unter der SIL Open Font License 1.1
+(frei nutzbar, auch kommerziell; kein Verkauf der Font-Dateien allein):
+
+| Schrift | Autor | Lizenz | Upstream |
+|---|---|---|---|
+| **Doto** (Display) | Ryoichi Tsunekawa | SIL OFL 1.1 | <https://fonts.google.com/specimen/Doto> |
+| **JetBrains Mono** (Body/Code) | JetBrains | SIL OFL 1.1 | <https://github.com/JetBrains/JetBrainsMono> |
+| **OpenDyslexic** (ehem. LRS-Option) | Abbie Gonzalez | SIL OFL 1.1 | <https://github.com/antijingoist/opendyslexic> |
+
+Hinweis: Für JetBrains Mono gilt Apache-2.0 nur für die Build-Skripte des
+Upstream-Repos — die Schriftdateien selbst stehen unter OFL 1.1. Herkunft und
+Prüfsummen der gebündelten Dateien: `design/STYLE-SOURCE.md`.
+
 ## Apache-2.0 (photon-node)
 
 Für Apache-2.0-lizenzierte Komponenten gilt: Der vollständige Lizenztext liegt

@@ -110,7 +110,7 @@ Dazu `/modus` (Stand anzeigen) und `/modus-aus` (Modus beenden).
     *   18 neue Tests (`test/web-auth.test.ts`), Smoke-Test um BYOM-Prüfungen erweitert.
 *   [x] **Design-Nacharbeiten (2026-08-23):**
     *   **Token-Generator** (`scripts/generate-tokens.mjs`, `npm run tokens`): erzeugt `web/ui/tokens.css` (Light/Dark-CSS-Variablen) und `design/tokens.ansi.json` (16-Farben-Zuordnung für die spätere CLI) aus `design/tokens.json`. `style.css` enthält keine handgespiegelten Farbwerte mehr.
-    *   **Schriften gebündelt:** `web/ui/fonts/` — Doto (Variable, OFL), JetBrains Mono Regular+Bold (v2.304, Apache-2.0). OpenDyslexic Regular (OFL 1.1) war ebenfalls enthalten und wurde **2026-09-01 auf Nutzerwunsch entfernt** (LRS-Schrift-Umschalter komplett raus). Prüfsummen und Herkunft: `design/STYLE-SOURCE.md`.
+    *   **Schriften gebündelt:** `web/ui/fonts/` — Doto (Variable, OFL), JetBrains Mono Regular+Bold (v2.304, OFL 1.1). OpenDyslexic Regular (OFL 1.1) war ebenfalls enthalten und wurde **2026-09-01 auf Nutzerwunsch entfernt** (LRS-Schrift-Umschalter komplett raus). Prüfsummen und Herkunft: `design/STYLE-SOURCE.md`.
     *   **OpenDyslexic-Umschalter:** ~~Knopf „LRS-Schrift" in der Web-Kopfzeile~~ — **2026-09-01 entfernt** (Nutzerentscheidung: ungewolltes Feature).
     *   **SSRF-Schutz für BYOM** (`pruefeEndpunkt` in `web/server/byom.ts`): Metadaten-/Link-local-/Reserve-/Multicast-/CGNAT-Adressen sind immer blockiert — auch als DNS-Antwort eines Hostnamens; IPv4-gemappte IPv6-Tricks abgedeckt. Loopback/RFC1918 bleiben erlaubt (lokale Modelle!). `SYNTAX_BOT_BYOM_STRICT=1` blockiert zusätzlich alle privaten Bereiche (für öffentliche Server). 5 neue Tests.
 *   [x] **Phase 2c — IDE-Anbindung Zed (2026-08-23):**

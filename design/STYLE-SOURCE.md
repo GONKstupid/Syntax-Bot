@@ -19,7 +19,7 @@ Alle drei Schriften sind gebündelt und liegen unter `web/ui/fonts/`.
 | Rolle | Schrift | Lizenz | Datei | Version / SHA-256 |
 |---|---|---|---|---|
 | Display (Wortmarke, Überschriften, Modus-Anzeige) | **Doto** (Ryoichi Tsunekawa, Punktraster-Variable-Font) | SIL OFL 1.1 | `doto-var.woff2` | v3, `0e1a8424…a271b` |
-| Body, Code, Diff | **JetBrains Mono** (JetBrains, Regular + Bold, Ligaturen deaktiviert) | Apache-2.0 | `JetBrainsMono-Regular.woff2`, `JetBrainsMono-Bold.woff2` | v2.304, `a9cb1cd8…45f2` / `c503cc5e…88a2` |
+| Body, Code, Diff | **JetBrains Mono** (JetBrains, Regular + Bold, Ligaturen deaktiviert) | SIL OFL 1.1 (nur die Build-Skripte des Upstream-Repos stehen unter Apache-2.0) | `JetBrainsMono-Regular.woff2`, `JetBrainsMono-Bold.woff2` | v2.304, `a9cb1cd8…45f2` / `c503cc5e…88a2` |
 | Optional: umschaltbare Body-Schrift für LRS | **OpenDyslexic** (Abbie Gonzalez) | SIL OFL 1.1 | `opendyslexic-regular.woff2` | Fontsource 5.3.0, `f007004a…ac1a` |
 
 Hinweis: OpenDyslexic ist heute unter der **SIL OFL 1.1** lizenziert

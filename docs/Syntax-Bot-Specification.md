@@ -309,8 +309,8 @@ mit Symbol/Text doppelt kodiert (nie Farbe allein, siehe Barrierefreiheit).
 | Rolle | Schrift | Lizenz | Anmerkung |
 |---|---|---|---|
 | Display / Headers / Modus-Anzeige | **Doto** | SIL OFL | Punktraster-Schrift (Ryoichi Tsunekawa); funktional nächste offene Entsprechung der Nothing-Ästhetik, selbst kein Zitat einer geschützten Schrift |
-| Code, Diff, Body | **JetBrains Mono** | Apache-2.0 | Regular + Bold; Ligen deaktiviert |
-| Optional (Barrierefreiheit) | **OpenDyslexic** | Bitstream-Vera-Lizenz (frei) | Als umschaltbare Body-Alternative für LRS-Nutzer — passt zum Einsatzzweck des Bots |
+| Code, Diff, Body | **JetBrains Mono** | SIL OFL 1.1 | Regular + Bold; Ligen deaktiviert |
+| Optional (Barrierefreiheit) | **OpenDyslexic** | SIL OFL 1.1 | Als umschaltbare Body-Alternative für LRS-Nutzer — passt zum Einsatzzweck des Bots |
 
 - Schriftgrößen auf einem 4-px-Raster; Body-Grundgröße ≥ 17 px (Lesbarkeit),
   Zeilenhöhe Body 1,6, Code 1,5.
