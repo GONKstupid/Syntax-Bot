@@ -407,7 +407,7 @@ Cleanup     ◐◐◐   (Umriss-Punkte: Zugriff, aber harte Logik-Grenze)
 
 ```
 syntax-bot/
-├── Docs/
+├── docs/
 │   ├── Syntax-Bot-Specification.md ← diese Datei
 │   └── HANDOFF.md
 ├── README.md

@@ -10,8 +10,8 @@ einzumischen**. Gedacht als Hilfsmittel bei einer Lese-Rechtschreib-Schwäche
 (LRS): Beim Programmieren soll der Gedanke zählen, nicht die Rechtschreibung.
 
 Die vollständige Architektur steht in
-[`Syntax-Bot-Specification.md`](Docs/Syntax-Bot-Specification.md), der aktuelle
-Arbeitsstand in [`HANDOFF.md`](Docs/HANDOFF.md).
+[`Syntax-Bot-Specification.md`](docs/Syntax-Bot-Specification.md), der aktuelle
+Arbeitsstand in [`HANDOFF.md`](docs/HANDOFF.md).
 
 ## Die drei Modi
 
@@ -287,7 +287,7 @@ Konto-System/BYOM/Thread-History) läuft, die IDE-Anbindung ist für Zed nativ u
 die Community-Extension „ACP Client“ umgesetzt. Offen sind
 die Vertiefung der IDE-Anbindung (Kontext wie offene Datei/Selektion)
 sowie eine formale Prüfung der Logik-Unveränderlichkeit im
-Cleanup-Modus — Details in `Docs/HANDOFF.md`.
+Cleanup-Modus — Details in `docs/HANDOFF.md`.
 
 ## Lizenz
 

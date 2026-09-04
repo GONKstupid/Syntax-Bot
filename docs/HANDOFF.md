@@ -140,7 +140,7 @@ Dazu `/modus` (Stand anzeigen) und `/modus-aus` (Modus beenden).
 
 ```
 syntax-bot/
-├── Docs/
+├── docs/
 │   ├── Syntax-Bot-Specification.md ← Quelle der Wahrheit
 │   └── HANDOFF.md                  ← diese Datei
 ├── README.md                     ← Benutzung
