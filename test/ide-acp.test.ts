@@ -586,6 +586,98 @@ describe("AcpAdapter", () => {
 		assert.deepEqual(fake.prompts, []);
 	});
 
+	it("OAuth-Login: manual_code wartet auf echte Eingabe (keine alte Menü-Antwort)", async () => {
+		const fake = fakePi();
+		let manuellerCode: string | undefined;
+		(fake as unknown as { modelRuntime: object }).modelRuntime = {
+			getProviders() {
+				return [{ id: "openrouter", name: "OpenRouter", auth: { oauth: { name: "OpenRouter OAuth" } } }];
+			},
+			async getAvailable() {
+				return [];
+			},
+			// Wie der echte OpenRouter-Fluss: erst auth_url, dann manual_code als
+			// Rückfrage, die auf Eingabe wartet (gegen den Callback geraced). Liest
+			// der Adapter dafür eine alte Menü-Antwort („2“/„1“) aus dem Puffer, wird
+			// der Callback-Server sofort geschlossen und die Browser-Anmeldung stirbt.
+			async login(
+				_providerId: string,
+				_typ: string,
+				interaktion: {
+					notify: (e: Record<string, unknown>) => void;
+					prompt: (p: Record<string, unknown>) => Promise<string>;
+				},
+			) {
+				interaktion.notify({ type: "auth_url", url: "https://openrouter.ai/auth?callback=x" });
+				manuellerCode = await interaktion.prompt({ type: "manual_code", message: "Code einfügen:" });
+				return { type: "oauth" };
+			},
+			async logout() {},
+		};
+		const updates: Array<{ update: { content?: { text?: string } } }> = [];
+		const adapter = new AcpAdapter({
+			agentDir: "/nirgendwo",
+			sessionErzeugen: async () => fake as never,
+		});
+		const verbindung = new AcpVerbindung(
+			(zeile) => fangeAuf(zeile, updates),
+			(anfrage) => adapter.anfrage(verbindung, anfrage),
+			() => {},
+		);
+		const session = (await adapter.anfrage(verbindung, {
+			jsonrpc: "2.0",
+			id: 60,
+			method: "session/new",
+			params: {},
+		})) as { sessionId: string };
+		const frage = async (id: number, text: string) =>
+			adapter.anfrage(verbindung, {
+				jsonrpc: "2.0",
+				id,
+				method: "session/prompt",
+				params: { sessionId: session.sessionId, prompt: [{ type: "text", text }] },
+			});
+
+		// Menü → Browser-Anmeldung → Anbieter wählen. Diese Antworten („2“, „1“)
+		// dürfen NICHT im Puffer landen und später den manual_code-Prompt beantworten.
+		await frage(61, "/login");
+		await frage(62, "2");
+		await frage(63, "1");
+		await new Promise((resolve) => setTimeout(resolve, 30));
+
+		// auth_url-Link ist angezeigt; der manual_code-Prompt ist noch OFFEN (wartet).
+		const texte = updates.map((u) => u.update.content?.text ?? "").join("\n");
+		assert.ok(texte.includes("https://openrouter.ai/auth"), "auth_url-Link erwartet");
+		assert.equal(manuellerCode, undefined, "manual_code darf nicht sofort (mit alter Menü-Antwort) aufgelöst werden");
+
+		// Erst die ECHTE Eingabe beantwortet den Prompt.
+		await frage(64, "https://openrouter.ai/callback?code=echt-123");
+		await new Promise((resolve) => setTimeout(resolve, 30));
+		assert.equal(manuellerCode, "https://openrouter.ai/callback?code=echt-123");
+		assert.deepEqual(fake.prompts, []);
+	});
+
+	it("Browser-Anmeldung: OAuth-Flows sind statisch registriert (Bundle-Sicherheit)", async () => {
+		// Pi lädt OAuth-Implementierungen über „bundler-opake“ dynamische Imports
+		// (pi-ai/dist/auth/oauth/load.js → import("./openrouter.js")). Im esbuild-
+		// Bundle der VSIX fehlen diese Dateien → „Cannot find module“ → jede
+		// Browser-Anmeldung stirbt still nach „… wird gestartet“. adapter.ts ruft
+		// deshalb registerBunOAuthFlows() beim Laden: das importiert alle Flows
+		// STATISCH (fest im Bundle) und hinterlegt sie als Loader, sodass der
+		// dynamische Import nie ausgelöst wird. Dieser Test sichert Import-Pfad und
+		// Auflösbarkeit der Loader-Kette. (Endgültiger Nachweis, dass der Code im
+		// Bundle inline ist: extension.js enthält openRouterOAuth — Bundle-Check.)
+		const bun = await import("@earendil-works/pi-ai/bun-oauth");
+		assert.equal(typeof bun.registerBunOAuthFlows, "function", "registerBunOAuthFlows fehlt");
+		assert.doesNotThrow(() => bun.registerBunOAuthFlows(), "Registrierung muss idempotent sein");
+
+		const load = (await import(
+			"../node_modules/@earendil-works/pi-ai/dist/auth/oauth/load.js"
+		)) as { loadOpenRouterOAuth: () => Promise<{ login: unknown }> };
+		const flow = await load.loadOpenRouterOAuth();
+		assert.equal(typeof flow.login, "function", "openRouterOAuth.login erwartet");
+	});
+
 	it("session/set_mode führt den Modus als Pi-Command aus", async () => {
 		const fake = fakePi();
 		const { adapter, verbindung } = adapterMitFake(fake);

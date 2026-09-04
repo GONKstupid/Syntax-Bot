@@ -25,6 +25,19 @@ import {
 import type { AcpVerbindung, RpcNotification, RpcRequest } from "./acp.ts";
 import { IdeUiBridge } from "./ui-bridge.ts";
 import { applyByomToSession, fetchRemoteModels, validateByomConfig } from "../vscode/web/server/byom.ts";
+import { registerBunOAuthFlows } from "@earendil-works/pi-ai/bun-oauth";
+
+// ── OAuth-Flows STATISCH registrieren — muss vor jeder Anmeldung passiert sein ──
+// Pi lädt die OAuth-Implementierungen (OpenRouter, Anthropic, GitHub Copilot, …)
+// über „bundler-opake“ dynamische Imports mit variablem Spezifier
+// (pi-ai/dist/auth/oauth/load.js → `import("./openrouter.js")`). esbuild kann
+// diesem Import nicht folgen, deshalb fehlen openrouter.js & Co. im VSIX-Bundle
+// und der Aufruf schlägt zur Laufzeit mit „Cannot find module“ fehl: Jede
+// Browser-Anmeldung stirbt dann still direkt nach „… wird gestartet“.
+// `registerBunOAuthFlows()` importiert alle Flows STATISCH (sie landen fest im
+// Bundle) und hinterlegt sie als Loader, sodass der dynamische Import nie
+// ausgelöst wird. Idempotent — gleicher pi-ai-REALPATH für Adapter und Pi.
+registerBunOAuthFlows();
 
 /** Die Modi als ACP-Modi — Reihenfolge wie in der Spec-Tabelle. */
 export const MODI = [
@@ -173,7 +186,7 @@ export class AcpAdapter {
 						promptCapabilities: {},
 					},
 					authMethods: [],
-					_meta: { agentName: "Syntax Bot", version: "0.5.0" },
+					_meta: { agentName: "Syntax Bot", version: "0.5.2" },
 				};
 			}
 			case "session/new":
@@ -325,9 +338,11 @@ export class IdeAcpSession {
 	private readonly bridge: IdeUiBridge;
 	private readonly verbindung: AcpVerbindung;
 	/** Offene Chat-Rückfrage (/login-Fluss) — Auflösen oder Ablehnen bei Abbruch. */
-	private frageOffen?: { resolve: (antwort: string) => void; reject: (grund: unknown) => void };
+	private frageOffen?: { resolve: (antwort: string) => void; reject: (grund: unknown) => void; signal?: AbortSignal };
 	/** Bereits beantwortete Chat-Fragen — Provider-Nachfragen bedienen sich daraus. */
 	private antwortPuffer: string[] = [];
+	/** Abbruch-Controller des laufenden Anmelde-Flusses — /- und neuer Thread brechen ihn ab. */
+	private loginAbbruch?: AbortController;
 	/** Länge des Assistententextes, der bereits als Chunk gesendet wurde. */
 	private gesendet = 0;
 	/** Länge des Denk-Protokolls, das bereits als Chunk gesendet wurde. */
@@ -442,7 +457,6 @@ export class IdeAcpSession {
 			const offen = this.frageOffen;
 			this.frageOffen = undefined;
 			if (!text.startsWith("/")) {
-				this.antwortPuffer.push(text);
 				offen.resolve(text);
 				return { stopReason: "end_turn" };
 			}
@@ -596,6 +610,9 @@ export class IdeAcpSession {
 					this.nachricht("Abgebrochen — ohne Key geht es nicht weiter.");
 					return;
 				}
+				// Key gezielt vorladen: login() fragt ihn intern per interaction.prompt()
+				// noch einmal ab — der Puffer beantwortet das ohne zweite Rückfrage.
+				this.antwortPuffer = [schluessel];
 				await this.pi.modelRuntime.login(provider.id, "api_key", this.interaktion());
 				await this.modellDesProvidersAktivieren(provider.id);
 				this.nachricht(`${provider.name} ist angemeldet.`);
@@ -609,7 +626,11 @@ export class IdeAcpSession {
 					`Browser-Anmeldung für ${provider.name} wird gestartet — der Link erscheint gleich hier. ` +
 						"Fertiggestellt wird automatisch, sobald du im Browser bestätigt hast.",
 				);
-				await this.pi.modelRuntime.login(provider.id, "oauth", this.interaktion());
+				// Puffer leeren: Der OAuth-Fluss stellt ECHTE Rückfragen (manual_code),
+				// die auf Eingabe warten MÜSSEN. Alte Menü-Antworten („2“, „1“) würden
+				// sonst sofort den Callback-Server schließen und die Anmeldung abwürgen.
+				this.antwortPuffer = [];
+				await this.pi.modelRuntime.login(provider.id, "oauth", this.interaktion({ progress: false }));
 				await this.modellDesProvidersAktivieren(provider.id);
 				this.nachricht(`${provider.name} ist angemeldet.`);
 				this.aktualisieren();
@@ -629,19 +650,28 @@ export class IdeAcpSession {
 			// Abbruch (/- oder neuer Thread) ist kein Fehler — nichts melden,
 			// der Abbruch wurde bereits im Chat quittiert.
 			if (fehler instanceof AbbruchError) return;
+			if (this.loginAbbruch?.signal.aborted) return;
 			this.nachricht(
 				`Anmeldung nicht abgeschlossen: ${fehler instanceof Error ? fehler.message : String(fehler)}`,
 			);
 		}
 	}
 
-	private interaktion() {
+	private interaktion(optionen?: { progress?: boolean }) {
+		const zeigeProgress = optionen?.progress ?? true;
+		// Eigener Abbruch-Controller: /- und „neuer Thread“ brechen den Login ab
+		// (schließt den OAuth-Callback-Server). modelRuntime.login() nutzt das Signal.
+		const abbruch = new AbortController();
+		this.loginAbbruch = abbruch;
 		return {
-			prompt: async (nachfrage: { type?: string; message?: string }) => {
-				// Die Frage wurde oft schon im Chat gestellt — Puffer zuerst.
+			signal: abbruch.signal,
+			prompt: async (nachfrage: { type?: string; message?: string; signal?: AbortSignal }) => {
+				// Eine gezielt vorgeladene Antwort (z. B. API-Key) zuerst — sonst ECHT
+				// im Chat nachfragen und auf die nächste Nachricht warten. Das Signal
+				// bricht die Rückfrage ab, sobald ein OAuth-Callback gewonnen hat.
 				const gepuffert = this.antwortPuffer.shift();
 				if (gepuffert !== undefined) return gepuffert.trim();
-				return (await this.frage(nachfrage.message ?? "Bitte eingeben:")).trim();
+				return (await this.frage(nachfrage.message ?? "Bitte eingeben:", nachfrage.signal)).trim();
 			},
 			notify: (ereignis: Record<string, unknown>) => {
 				switch (ereignis.type) {
@@ -668,7 +698,7 @@ export class IdeAcpSession {
 						break;
 					}
 					case "progress":
-						this.nachricht(String(ereignis.message ?? "…"));
+						if (zeigeProgress) this.nachricht(String(ereignis.message ?? "…"));
 						break;
 					default:
 						this.nachricht(JSON.stringify(ereignis));
@@ -1207,9 +1237,26 @@ export class IdeAcpSession {
 	 * Eine Rückfrage im Chat stellen und auf die nächste Nutzernachricht
 	 * warten (wird in prompt() abgefangen und aufgelöst).
 	 */
-	private frage(text: string): Promise<string> {
+	private frage(text: string, signal?: AbortSignal): Promise<string> {
+		if (signal?.aborted) return Promise.reject(new AbbruchError());
 		return new Promise((resolve, reject) => {
-			this.frageOffen = { resolve, reject };
+			const onAbort = () => {
+				if (this.frageOffen?.signal === signal) this.frageOffen = undefined;
+				signal?.removeEventListener("abort", onAbort);
+				reject(new AbbruchError());
+			};
+			this.frageOffen = {
+				signal,
+				resolve: (antwort: string) => {
+					signal?.removeEventListener("abort", onAbort);
+					resolve(antwort);
+				},
+				reject: (grund: unknown) => {
+					signal?.removeEventListener("abort", onAbort);
+					reject(grund);
+				},
+			};
+			signal?.addEventListener("abort", onAbort, { once: true });
 			this.nachricht(text);
 		});
 	}
@@ -1223,6 +1270,9 @@ export class IdeAcpSession {
 		const offen = this.frageOffen;
 		this.frageOffen = undefined;
 		this.antwortPuffer = [];
+		// Laufenden Anmelde-Fluss abbrechen — schließt den OAuth-Callback-Server,
+		// damit /- und „neuer Thread“ auch die Browser-Anmeldung unterbrechen.
+		this.loginAbbruch?.abort();
 		offen?.reject(new AbbruchError());
 		void this.pi.abort().catch(() => {});
 	}
@@ -1525,6 +1575,7 @@ export class IdeAcpSession {
 	dispose(): void {
 		const offen = this.frageOffen;
 		this.frageOffen = undefined;
+		this.loginAbbruch?.abort();
 		offen?.reject(new AbbruchError());
 		this.unsubscribe();
 		this.bridge.schliessen();

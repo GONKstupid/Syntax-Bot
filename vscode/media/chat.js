@@ -6,7 +6,7 @@
 
 /* Selbst-Diagnose: Sichtbarer Stempel + alle Fehler landen im Chat und beim
    Extension-Host, statt stumm nichts zu tun. */
-const WEBVIEW_VERSION = "0.5.0";
+const WEBVIEW_VERSION = "0.5.2";
 
 function diagnose(text) {
 	try {

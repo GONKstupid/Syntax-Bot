@@ -1,6 +1,8 @@
 # Syntax Bot — Projektübergabe (HANDOFF)
 
-**Stand: 2026-09-03 · Cleanup-Stilquelle entfernt: die GPL-2.0-lizenzierte `linux-kernel-coding-style.rst` (ursprünglich nur als Beispiel gedacht) ist samt `STYLE-SOURCE.md` und `scripts/update-coding-style.sh` raus; der Cleanup-Modus stützt sich jetzt auf die eigene 7-Punkte-Zusammenfassung im Prompt (`cleanup.md`, `{{STYLE_PATH}}` entfernt). Betroffen: `cleanup/index.ts` (stylePath/promptVariables weg), `modes.test.ts` (Test auf „keine Stilquellen-Datei" gedreht), `package.json` (`update-style`-Script weg), README + Spec nachgezogen. Entfernt die GPL-Belastung für die Distribution (VSIX/Marketplace — Nutzer wählt Veröffentlichungsweg „Option B"). Tests grün.**
+**Stand: 2026-09-04 · VS-Code-Extension 0.5.x — Chat-Verlauf, klickbare Browser-Anmeldung und die Wurzel des OAuth-Bundle-Fehlers. **(0.5.0, commit `be210ed`):** ⋯-Menü »Threads« mit Fortsetzen (Pi-Session-Dateien), klickbare Login-Links (Markdown `[text](url)` → Klick im Webview → `openExternal` im Browser), Thread-Isolation (neuer Thread = frischer Kontext, `neueSession()` leert den Agent-State), `/-` bricht laufende Dialoge/Züge ab. **(0.5.1):** OAuth-Rückfrage-Puffer bereinigt — `manual_code` wartet auf ECHTE Eingabe statt alter Menü-Antworten („2“/„1“), die sonst den Callback-Server sofort schließen; eigener `loginAbbruch`-Controller + signal-bewusste `frage()` (`/-` und neuer Thread brechen die Browser-Anmeldung ab). **(0.5.2) — Wurzel gefunden, warum die Browser-Anmeldung im VSIX still nach „… wird gestartet“ starb:** Pi lädt OAuth-Implementierungen über „bundler-opake“ dynamische Imports mit variablem Spezifier (`pi-ai/dist/auth/oauth/load.js` → `import("./openrouter.js")`); esbuild kann dem nicht folgen, also fehlten `openrouter.js` & Co. im Bundle und der Aufruf schlug mit „Cannot find module“ fehl — nur OAuth betroffen, API-Key nicht (`envApiKeyAuth` ist statisch). **Fix:** `registerBunOAuthFlows()` aus `@earendil-works/pi-ai/bun-oauth` beim Modul-Load in `ide/adapter.ts` importiert alle 7 OAuth-Flows STATISCH (sie landen fest im Bundle) und setzt `bundledLoaders`, sodass der dynamische Import nie ausgelöst wird. Das erklärt auch den **leeren Chat-Verlauf**: das Sessions-Verzeichnis war leer, weil Login nie durchkam → kein Agenten-Zug → keine JSONL-Persistenz (`createAgentSession` verdrahtet einen persistierenden `SessionManager` via `options.sessionManager ?? SessionManager.create(...)`, funktioniert also, sobald ein echter Zug läuft). Verifiziert per Bundle-Grep (`openRouterOAuth`, `startCallbackServer`, `require("node:http")`). **140 Tests grün, VSIX 0.5.2** (Id `syntax-bot`, Publisher `Gonk`).**
+
+> **Stand: 2026-09-03 · Cleanup-Stilquelle entfernt: die GPL-2.0-lizenzierte `linux-kernel-coding-style.rst` (ursprünglich nur als Beispiel gedacht) ist samt `STYLE-SOURCE.md` und `scripts/update-coding-style.sh` raus; der Cleanup-Modus stützt sich jetzt auf die eigene 7-Punkte-Zusammenfassung im Prompt (`cleanup.md`, `{{STYLE_PATH}}` entfernt). Betroffen: `cleanup/index.ts` (stylePath/promptVariables weg), `modes.test.ts` (Test auf „keine Stilquellen-Datei" gedreht), `package.json` (`update-style`-Script weg), README + Spec nachgezogen. Entfernt die GPL-Belastung für die Distribution (VSIX/Marketplace — Nutzer wählt Veröffentlichungsweg „Option B"). Tests grün.**
 
 > **Stand: 2026-09-01 · Konto-Nacharbeiten II Web: Modell-Umschalter listet jetzt alle verfügbaren Modelle angemeldeter Provider (WS `model_list`/`model_set`, Filter wie verfuegbareModelle() im IDE-Adapter); Passwort ändern (`POST /auth/password`, andere Sitzungen fliegen) und Konto löschen (`POST /auth/delete` mit Passwort-Bestätigung — räumt Threads samt Session-Dateien, Provider, Credentials und Arbeitsbereich auf) über die Konto-Seite; Senden-Knopf nur noch Icon in Fußleisten-Höhe; 135 Tests grün**
 
@@ -49,7 +51,7 @@ Syntax Bot ist **ein** einziger Agent (eine Session), der seine unterschiedliche
 
 ```powershell
 .\scripts\syntax-bot.ps1          # startet Syntax Bot (richtet beim ersten Mal alles ein)
-npm test                          # 135 Tests für Modus-Grenzen, Leitplanken, Web-Jail, Konto/Threads/Auth/BYOM/SSRF, ACP
+npm test                          # 140 Tests für Modus-Grenzen, Leitplanken, Web-Jail, Konto/Threads/Auth/BYOM/SSRF, ACP
 npm run web                       # Web-Oberfläche: http://127.0.0.1:4711 (Port: SYNTAX_BOT_WEB_PORT)
 node test/web-smoke.mjs 4711      # Smoke-Test gegen einen laufenden Web-Server
 ```
@@ -124,7 +126,7 @@ Dazu `/modus` (Stand anzeigen) und `/modus-aus` (Modus beenden).
     *   **Fehlerbild-Ursache**: Meldungen „Unbekannter Fehler" und leere Anbieter-Dropdowns kamen von einem veralteten Node-Server auf 4711 (gestartet vor dem Umbau). Nach Code-Umbauten am Web-Server den Prozess neu starten — UI-Dateien kommen frisch von der Platte, die Serverlogik nicht.
     *   **Zahlengrundlage Anbieter**: `getProviders()` liefert 40 Katalog-Einträge (39 mit `apiKey`, 7 mit `oauth`) — unabhängig von `models.json`, der Katalog kommt aus dem SDK-Paket.
     *   **Nacharbeiten II (selber Tag)**: Modell-Umschalter zeigt alle Modelle angemeldeter Provider — neue WS-Nachrichten `model_list`/`model_set` (`models`-Antwort mit `{id, provider, aktiv}`), Filter exakt wie `verfuegbareModelle()` im IDE-Adapter; Kontoverwaltung auf der Konto-Seite: Passwort ändern (`POST /auth/password` mit `passwortAlt`/`passwortNeu`, andere Sitzungen werden beendet — `SessionStore.deleteForUser`) und Konto löschen (`POST /auth/delete`, nur mit korrektem Passwort; räumt `ThreadStore.loescheAlle` samt Session-Dateien, `ProviderStore.loescheAlle`, Credential-Datei und Arbeitsbereich auf); Senden-Knopf als reines Icon (`fuss-knopf--senden`), gleiche Höhe wie die übrigen Fußleisten-Knöpfe.
-*   [x] Test-Suite: **135 Tests, alle grün** (`npm test`).
+*   [x] Test-Suite: **140 Tests, alle grün** (`npm test`).
 *   [ ] Nächster Schritt: **Phase 2d vertiefen** — manuelle Erprobung in VS Code (ACP Client), danach ggf. Zed/VS-Code-Unterschiede im Adapter glätten.
 *   [x] Lauffähig: `scripts/syntax-bot.ps1` (CLI) und `npm run web` (Web).
 
@@ -161,11 +163,11 @@ syntax-bot/
 │   │   │                             byom.ts, provider-store.ts, ui-bridge.ts, jail-extension.ts
 │   │   └── ui/                   ← index.html, login.html (+login.js), konto.html, app.js, konto.js,
 │   │                                 style.css, tokens.css (Spec-Design, VS-Code-Parität)
-│   └── *.vsix                    ← gebaute Extension-Pakete (0.3.0, 0.4.0)
+│   └── *.vsix                    ← gebaute Extension-Pakete (0.4.0 … 0.5.2)
 ├── ide/                          ← ACP-Adapter (Zed/VS-Code-ACP-Clients)
 ├── design/                       ← tokens.json, STYLE-SOURCE.md
 ├── scripts/                      ← bootstrap.mjs, syntax-bot.*, update-pi.*
-└── test/                         ← 135 Tests + web-smoke.mjs
+└── test/                         ← 140 Tests + web-smoke.mjs
 ```
 
 ---
@@ -244,6 +246,7 @@ syntax-bot/
 *   **Node-TS-Fallstrick:** Der Server läuft direkt unter Node ≥ 22.18 im Strip-only-Modus. **Keine Constructor-Parameter-Properties** (`constructor(private x: …)`) und keine Enums — Node lehnt beides mit `ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX` ab. Explizite Felder + Zuweisung im Konstruktor verwenden.
 *   **Abhängigkeit `ws`:** kommt aus dem verschachtelten `node_modules` der isolierten Pi-Instanz und wird per `test/link-deps.mjs` verlinkt — nicht aus dem npm-Registry-Install. Bei neuer Pi-Version prüfen, ob `ws` noch da ist.
 *   **Version-Mismatch:** Pi wird bei jedem Start auf `latest` gezogen. Eine Breaking Change in der Extension-API bricht Syntax Bot dann sofort. Gegenmittel: `SYNTAX_BOT_PI_VERSION` pinnen.
+*   **OAuth-Flows im Bundle (fixiert 2026-09-04):** Pi lädt OAuth-Implementierungen über „bundler-opake“ dynamische Imports mit variablem Spezifier (`pi-ai/dist/auth/oauth/load.js` → `import("./openrouter.js")`), die esbuild/webpack NICHT bündeln können. Im VSIX fehlen dann `openrouter.js` & Co., und **jede Browser-Anmeldung schlägt still mit „Cannot find module“ fehl** (API-Key-Anmeldung nicht — `envApiKeyAuth` ist statisch). Gegenmittel: `registerBunOAuthFlows()` aus `@earendil-works/pi-ai/bun-oauth` beim Start aufrufen (in `ide/adapter.ts` auf Modulebene) — importiert alle 7 Flows statisch ins Bundle und setzt `bundledLoaders`, sodass der dynamische Import nie ausgelöst wird. Gilt für JEDE gebündelte Pi-App mit OAuth; beim Lauf aus der Quelle (`node ide/index.ts`) unkritisch, weil der Import dort auf Platte auflöst. Nach dem Bauen prüfen: Bundle-Grep auf `openRouterOAuth` + `require("node:http")`. Achtung: an die gebündelte Pi-Version gepinnt (`0.84.4`) — bei einem Pi-Update den Loader-Mechanismus neu prüfen.
 *   **Installation-Sicherheit:** unverändert kritisch, aber abgedeckt — `install_pi_package` ist der einzige Weg zu `pi install`, und die Rückfrage ist nicht abschaltbar.
 *   **BYOM-Endpunkte sind SSRF-Fläche:** entschärft (2026-08-23) durch `pruefeEndpunkt`: Metadaten-/Link-local-/Reserve-/Multicast-/CGNAT-Bereiche sind immer blockiert, inklusive DNS-Auflösungsprüfung und IPv4-gemappter IPv6-Tricks; Restrisiken bleiben Timeout/Drossel plus der bewusste Allowlist-Bereich für lokale Modelle (Loopback/RFC1918). Öffentliche Server sollten `SYNTAX_BOT_BYOM_STRICT=1` setzen.
 *   **Key-Persistenz (geändert 2026-09-01):** BYOM-/Provider-Konfiguration wird pro Konto in `~/.syntax-bot/web-providers.json` persistiert (Plaintext, `chmod 0600` best-effort) — Entscheidung des Nutzers für den Komfort beim lokalen Betrieb. **Native Provider-Anmeldungen** (API-Keys UND OAuth-Tokens) liegen zusätzlich pro Konto in `~/.syntax-bot/web-credentials/` (ebenfalls Plaintext-JSON, chmod 0600 best-effort) — beides wäre für einen **öffentlichen** Server wieder zu entfernen bzw. zu verschlüsseln. Konten (`web-accounts.json`) enthalten nur scrypt-Hashes, keine Klartext-Passwörter.
