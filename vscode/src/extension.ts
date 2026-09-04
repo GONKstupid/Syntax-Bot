@@ -402,6 +402,68 @@ export class ChatSitzung implements vscode.Disposable {
 				});
 				break;
 			}
+			case "threads": {
+				// Chat-Verlauf: frühere Threads dieses Arbeitsbereichs auflisten.
+				if (!this.sessionId) return;
+				try {
+					const antwort = (await this.client.anfragen("syntax-bot/threads", {
+						sessionId: this.sessionId,
+					})) as { threads?: unknown[] };
+					this.sende({ type: "threads", threads: antwort.threads ?? [] });
+				} catch (fehler) {
+					this.sende({ type: "error", text: fehler instanceof Error ? fehler.message : String(fehler) });
+				}
+				break;
+			}
+			case "openThread": {
+				// Alten Thread fortsetzen: Laufendes abbrechen, dann per Pfad laden.
+				const pfad = String(nachricht.pfad ?? "");
+				if (!pfad || !this.sessionId) return;
+				this.client.benachrichtigen("session/cancel", { sessionId: this.sessionId });
+				this.laufend = false;
+				try {
+					const antwort = (await this.client.anfragen("session/load", {
+						sessionId: this.sessionId,
+						path: pfad,
+					})) as { _meta?: { verlauf?: Array<{ rolle: string; text: string }> } };
+					this.transkript = [];
+					this.assistentEntwurf = undefined;
+					this.nutzerImZug = false;
+					this.sende({ type: "threadGeladen", verlauf: antwort._meta?.verlauf ?? [] });
+					await this.zustandSenden();
+				} catch (fehler) {
+					this.sende({ type: "error", text: fehler instanceof Error ? fehler.message : String(fehler) });
+				}
+				break;
+			}
+			case "newThread": {
+				// Neuer Thread: offene Prozesse (z. B. Anmeldung) abbrechen und
+				// den Kontext leeren — jeder Thread bekommt seinen eigenen.
+				if (!this.sessionId) return;
+				this.client.benachrichtigen("session/cancel", { sessionId: this.sessionId });
+				this.laufend = false;
+				this.transkript = [];
+				this.assistentEntwurf = undefined;
+				this.nutzerImZug = false;
+				this.sende({ type: "threadNeu" });
+				try {
+					await this.client.anfragen("session/prompt", {
+						sessionId: this.sessionId,
+						prompt: [{ type: "text", text: "/new" }],
+					});
+				} catch (fehler) {
+					this.sende({ type: "error", text: fehler instanceof Error ? fehler.message : String(fehler) });
+				}
+				await this.zustandSenden();
+				break;
+			}
+			case "openLink": {
+				// Klickbarer Link aus dem Chat (z. B. Browser-Anmeldung) — im
+				// System-Browser öffnen, ohne Kopieren/Einfügen.
+				const url = String(nachricht.url ?? "");
+				if (/^https?:\/\//i.test(url)) void vscode.env.openExternal(vscode.Uri.parse(url));
+				break;
+			}
 		}
 	}
 }
@@ -522,6 +584,11 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
 		const daten = readFileSync(join(this.context.extensionPath, "media", "fonts", name));
 		return `data:font/woff2;base64,${daten.toString("base64")}`;
 	}
+
+	/** Neuer Thread über die Befehlspalette — bricht Laufendes ab, leert den Kontext. */
+	neuerThread(): void {
+		void this.sitzung?.nachricht({ type: "newThread" });
+	}
 }
 
 function safeParse(text: string): unknown {
@@ -581,7 +648,7 @@ export function activate(context: vscode.ExtensionContext): void {
 			await vscode.commands.executeCommand("syntaxBot.chat.focus");
 		}),
 		vscode.commands.registerCommand("syntaxBot.newSession", () => {
-			void this.sitzung?.nachricht({ type: "prompt", text: "/new" });
+			provider.neuerThread();
 		}),
 	);
 }

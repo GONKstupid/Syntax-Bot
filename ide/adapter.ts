@@ -60,6 +60,7 @@ export const KOMMANDOS: Array<{ name: string; description: string; hint?: string
 	{ name: "reload", description: "Extensions und Konfiguration neu laden", modus: "ide" },
 	{ name: "settings", description: "Einstellungen direkt im Chat ändern", modus: "ide" },
 	{ name: "help", description: "Übersicht der Commands", modus: "ide" },
+	{ name: "-", description: "Laufenden Prozess abbrechen (z. B. Anmeldung)", modus: "ide" },
 	{ name: "resume", description: "Frühere Session fortsetzen", modus: "tui" },
 	{ name: "tree", description: "Im Session-Baum navigieren", modus: "tui" },
 	{ name: "share", description: "Session als Link hochladen", modus: "tui" },
@@ -82,9 +83,22 @@ const TUI_HINWEIS = (name: string) =>
 	`/${name} gibt es nur im Terminal-TUI von Pi (scripts\\syntax-bot.cmd). ` +
 	"In der IDE ist es bewusst nicht eingebaut — wenn du es brauchst, sag Bescheid.";
 
+/**
+ * Signal, dass ein Dialog oder Zug vom Nutzer abgebrochen wurde (via „/-“,
+ * „/new“, Thread-Wechsel oder Stopp). Kein Fehler — die Dialog-Schleifen
+ * fangen ihn ab und beenden sich still, statt eine Fehlermeldung zu zeigen.
+ */
+class AbbruchError extends Error {
+	constructor() {
+		super("Vorgang abgebrochen.");
+		this.name = "AbbruchError";
+	}
+}
+
 /** Textanteil einer Assistenten-Nachricht (wie in web/server/session-host.ts). */
 function extractText(message: unknown): string {
 	const content = (message as { content?: unknown })?.content;
+	if (typeof content === "string") return content;
 	if (!Array.isArray(content)) return "";
 	return content
 		.filter((block): block is { type: "text"; text: string } => block?.type === "text")
@@ -159,7 +173,7 @@ export class AcpAdapter {
 						promptCapabilities: {},
 					},
 					authMethods: [],
-					_meta: { agentName: "Syntax Bot", version: "0.3.0" },
+					_meta: { agentName: "Syntax Bot", version: "0.5.0" },
 				};
 			}
 			case "session/new":
@@ -167,12 +181,23 @@ export class AcpAdapter {
 				const cwd = typeof params.cwd === "string" && params.cwd ? params.cwd : process.cwd();
 				const sessionId = anfrage.method === "session/load" ? String(params.sessionId ?? "") : randomUUID();
 
-				// Bei load: die Pi-Session-Datei aus dem Mapping wiederherstellen.
+				// Bei load: die Pi-Session-Datei ermitteln — entweder direkt über den
+				// mitgegebenen Pfad (Thread-Verlauf) oder über das Mapping.
 				let sessionFile: string | undefined;
 				if (anfrage.method === "session/load") {
-					sessionFile = this.leseMapping()[sessionId];
+					const pfad = typeof params.path === "string" && params.path ? params.path : undefined;
+					sessionFile = pfad ?? this.leseMapping()[sessionId];
 					if (!sessionFile || !existsSync(sessionFile)) {
 						throw new Error(`Session „${sessionId}“ ist nicht bekannt oder ihre Datei fehlt.`);
+					}
+					// Eine bereits offene Session unter derselben ID ersetzen
+					// (Thread-Wechsel in der VS-Code-Extension): erst laufende
+					// Prozesse abbrechen, dann verwerfen, damit nichts nachfunken kann.
+					const alt = this.sessions.get(sessionId);
+					if (alt) {
+						alt.abbrechen();
+						alt.dispose();
+						this.sessions.delete(sessionId);
 					}
 				}
 
@@ -213,8 +238,18 @@ export class AcpAdapter {
 							description: modus.beschreibung,
 						})),
 					},
-					_meta: { workspace: cwd },
+					_meta: {
+						workspace: cwd,
+						// Beim Fortsetzen eines Threads: bisherigen Verlauf mitschicken,
+						// damit der Client ihn im Chat wiederherstellen kann.
+						verlauf: anfrage.method === "session/load" ? gehostet.verlauf() : undefined,
+					},
 				};
+			}
+			case "syntax-bot/threads": {
+				const gehostet = this.sessions.get(String(params.sessionId));
+				if (!gehostet) throw new Error("Unbekannte Session.");
+				return await gehostet.threads();
 			}
 			case "session/set_mode": {
 				const gehostet = this.sessions.get(String(params.sessionId));
@@ -289,8 +324,8 @@ export class IdeAcpSession {
 	private readonly pi: AgentSession;
 	private readonly bridge: IdeUiBridge;
 	private readonly verbindung: AcpVerbindung;
-	/** Resolver einer offenen Chat-Rückfrage (/login-Fluss). */
-	private frageOffen?: (antwort: string) => void;
+	/** Offene Chat-Rückfrage (/login-Fluss) — Auflösen oder Ablehnen bei Abbruch. */
+	private frageOffen?: { resolve: (antwort: string) => void; reject: (grund: unknown) => void };
 	/** Bereits beantwortete Chat-Fragen — Provider-Nachfragen bedienen sich daraus. */
 	private antwortPuffer: string[] = [];
 	/** Länge des Assistententextes, der bereits als Chunk gesendet wurde. */
@@ -341,7 +376,11 @@ export class IdeAcpSession {
 	private kommandosBekanntgeben(): void {
 		this.sendeUpdate({
 			sessionUpdate: "available_commands_update",
-			availableCommands: KOMMANDOS.map((kommando) => ({
+			// „/-“ (Abbruch) bewusst NICHT in der Vorschlagsliste: Es soll beim
+			// Tippen nicht per Enter zu „/- “ vervollständigt, sondern SOFORT
+			// gesendet werden — ein Abbruch darf kein zweites Enter brauchen.
+			// Entdeckbar bleibt er über /help.
+			availableCommands: KOMMANDOS.filter((kommando) => kommando.name !== "-").map((kommando) => ({
 				name: kommando.name,
 				description: kommando.description,
 			})),
@@ -400,15 +439,23 @@ export class IdeAcpSession {
 		// offene Rückfrage kontrolliert ab und werden ausgeführt (sonst würde
 		// /settings vom hängenden Login-Dialog verschluckt).
 		if (this.frageOffen) {
-			const auflösen = this.frageOffen;
+			const offen = this.frageOffen;
 			this.frageOffen = undefined;
 			if (!text.startsWith("/")) {
 				this.antwortPuffer.push(text);
-				auflösen(text);
+				offen.resolve(text);
 				return { stopReason: "end_turn" };
 			}
-			auflösen("");
+			// Slash-Command mitten in einer Rückfrage: die Dialog-Schleife wird
+			// abgelehnt (statt mit "" aufgelöst) und beendet sich damit sauber.
+			offen.reject(new AbbruchError());
 			this.nachricht("*(Offene Eingabe abgebrochen.)*");
+		}
+		// „/-“ (und Aliase) bricht offene Dialoge UND laufende Modell-Züge ab.
+		if (text === "/-" || text === "/abbruch" || text === "/cancel" || text === "/stop") {
+			this.prozessAbbrechen();
+			this.nachricht("*(Abgebrochen.)*");
+			return { stopReason: "end_turn" };
 		}
 		if (!text || text === "-") return { stopReason: "end_turn" };
 		// „-" ist die Bestätigung für „leer" bei Chat-Rückfragen (z. B. kein
@@ -481,8 +528,7 @@ export class IdeAcpSession {
 				await this.logoutKommando(argument);
 				break;
 			case "new":
-				this.pi.sessionManager.newSession();
-				this.nachricht("Neue Session begonnen.");
+				this.neueSession();
 				break;
 			case "compact": {
 				const ergebnis = await this.pi.compact(argument || undefined);
@@ -580,6 +626,9 @@ export class IdeAcpSession {
 			const wahl = (await this.frage("Deine Wahl (1, 2 oder 3):")).trim();
 			await this.loginKommando(wahl);
 		} catch (fehler) {
+			// Abbruch (/- oder neuer Thread) ist kein Fehler — nichts melden,
+			// der Abbruch wurde bereits im Chat quittiert.
+			if (fehler instanceof AbbruchError) return;
 			this.nachricht(
 				`Anmeldung nicht abgeschlossen: ${fehler instanceof Error ? fehler.message : String(fehler)}`,
 			);
@@ -599,17 +648,25 @@ export class IdeAcpSession {
 					case "info":
 						this.nachricht(String(ereignis.message ?? ""));
 						break;
-					case "auth_url":
+					case "auth_url": {
+						// Klickbarer Markdown-Link: Die Webview rendert [text](url)
+						// als <a> und leitet den Klick an den Host weiter, der ihn
+						// per openExternal im Browser öffnet — ohne Kopieren/Einfügen.
+						const url = String(ereignis.url);
 						this.nachricht(
-							`🔐 Bitte diesen Link öffnen und dort anmelden:\n${String(ereignis.url)}\n` +
-								(ereignis.instructions ? `\n${String(ereignis.instructions)}` : ""),
+							`🔐 **Browser-Anmeldung** — [hier klicken und im Browser anmelden](${url})\n` +
+								(ereignis.instructions ? `\n${String(ereignis.instructions)}` : "") +
+								`\n\n*(Falls der Klick nicht geht, diese Adresse öffnen: ${url})*`,
 						);
 						break;
-					case "device_code":
+					}
+					case "device_code": {
+						const uri = String(ereignis.verificationUri);
 						this.nachricht(
-							`🔐 Öffne ${String(ereignis.verificationUri)} und gib dort diesen Code ein:\n**${String(ereignis.userCode)}**`,
+							`🔐 [${uri}](${uri}) öffnen und dort diesen Code eingeben:\n**${String(ereignis.userCode)}**`,
 						);
 						break;
+					}
 					case "progress":
 						this.nachricht(String(ereignis.message ?? "…"));
 						break;
@@ -1049,7 +1106,16 @@ export class IdeAcpSession {
 				`**Einstellungen** — Ziffer eingeben zum Ändern (Boolesche Werte kippen direkt):\n${menü}\n\n` +
 					"Fertig? Schreib einfach etwas anderes.",
 			);
-			const wahl = (await this.frage("Nummer (oder fertig):")).trim();
+			let wahl: string;
+			try {
+				wahl = (await this.frage("Nummer (oder fertig):")).trim();
+			} catch (fehler) {
+				if (fehler instanceof AbbruchError) {
+					this.nachricht("Einstellungen geschlossen.");
+					return;
+				}
+				throw fehler;
+			}
 			const index = Number.parseInt(wahl, 10);
 			if (!Number.isFinite(index) || index < 1 || index > einträge.length) {
 				this.nachricht("Einstellungen geschlossen.");
@@ -1063,6 +1129,10 @@ export class IdeAcpSession {
 			try {
 				this.nachricht(await eintrag.schreiben());
 			} catch (fehler) {
+				if (fehler instanceof AbbruchError) {
+					this.nachricht("Einstellungen geschlossen.");
+					return;
+				}
 				this.nachricht(`Nicht geändert: ${fehler instanceof Error ? fehler.message : String(fehler)}`);
 			}
 		}
@@ -1138,10 +1208,91 @@ export class IdeAcpSession {
 	 * warten (wird in prompt() abgefangen und aufgelöst).
 	 */
 	private frage(text: string): Promise<string> {
-		return new Promise((resolve) => {
-			this.frageOffen = resolve;
+		return new Promise((resolve, reject) => {
+			this.frageOffen = { resolve, reject };
 			this.nachricht(text);
 		});
+	}
+
+	/**
+	 * Bricht alles Laufende ab: eine offene Chat-Rückfrage (Login-/Settings-Dialog)
+	 * wird abgelehnt — die Dialog-Schleife endet dadurch — und ein laufender
+	 * Modell-Zug wird gestoppt. Danach ist der Kanal wieder frei für Neues.
+	 */
+	private prozessAbbrechen(): void {
+		const offen = this.frageOffen;
+		this.frageOffen = undefined;
+		this.antwortPuffer = [];
+		offen?.reject(new AbbruchError());
+		void this.pi.abort().catch(() => {});
+	}
+
+	/**
+	 * Frischer Kontext: laufende Prozesse abbrechen, Session-Datei neu anlegen
+	 * UND den Agent-State leeren. `sessionManager.newSession()` setzt nur die
+	 * Datei zurück — die Nachrichten im Arbeitsspeicher (der eigentliche
+	 * Modell-Kontext) blieben sonst erhalten und würden mit dem nächsten Thread
+	 * geteilt. So bekommt jeder Thread seinen eigenen Kontext.
+	 */
+	private neueSession(): void {
+		this.prozessAbbrechen();
+		this.pi.sessionManager.newSession();
+		try {
+			const agent = (this.pi as unknown as { agent?: { state?: { messages?: unknown[] } } }).agent;
+			if (agent?.state) agent.state.messages = this.pi.sessionManager.buildSessionContext().messages;
+		} catch {
+			/* Fallback: nur die Session-Datei wurde zurückgesetzt. */
+		}
+		this.gesendet = 0;
+		this.denkGesendet = 0;
+		this.antwortPuffer = [];
+		this.hatGeantwortet = false;
+		this.nachricht("Neue Session begonnen — der Kontext ist leer.");
+	}
+
+	/** Frühere Threads dieses Arbeitsbereichs — für den Chat-Verlauf. */
+	async threads(): Promise<{ threads: Array<Record<string, unknown>> }> {
+		// Defensive: Test-Fakes kennen getSessionDir ggf. nicht — dann wird das
+		// Standard-Verzeichnis verwendet (sessionDir ist optional).
+		const sm = this.pi.sessionManager as unknown as { getSessionDir?: () => string };
+		const dir = typeof sm.getSessionDir === "function" ? sm.getSessionDir() : undefined;
+		const liste = (await SessionManager.list(this.cwd, dir).catch(() => [])) as Array<{
+			path: string;
+			id: string;
+			name?: string;
+			created?: Date;
+			modified?: Date;
+			messageCount?: number;
+			firstMessage?: string;
+		}>;
+		const aktuelleDatei = this.pi.sessionFile;
+		return {
+			threads: liste.map((s) => ({
+				pfad: s.path,
+				id: s.id,
+				titel: s.name?.trim() || s.firstMessage?.trim().replace(/\s+/g, " ").slice(0, 60) || "Thread",
+				erstellt: s.created?.getTime?.() ?? 0,
+				aktualisiert: s.modified?.getTime?.() ?? 0,
+				nachrichten: s.messageCount ?? 0,
+				aktiv: s.path === aktuelleDatei,
+			})),
+		};
+	}
+
+	/** Bisheriges Gespräch (Nutzer/Assistent) — zum Wiederherstellen im Chat. */
+	verlauf(): Array<{ rolle: "nutzer" | "agent"; text: string }> {
+		const ausgabe: Array<{ rolle: "nutzer" | "agent"; text: string }> = [];
+		// Defensive: nicht jede Pi-Instanz (z. B. Test-Fakes) liefert `messages`.
+		const nachrichten = this.pi.messages as unknown;
+		if (!Array.isArray(nachrichten)) return ausgabe;
+		for (const message of nachrichten) {
+			const rolle = (message as { role?: string }).role;
+			if (rolle !== "user" && rolle !== "assistant") continue;
+			const text = extractText(message).trim();
+			if (!text) continue;
+			ausgabe.push({ rolle: rolle === "user" ? "nutzer" : "agent", text });
+		}
+		return ausgabe;
 	}
 
 	private fehlermeldung(fehler: unknown): void {
@@ -1162,7 +1313,7 @@ export class IdeAcpSession {
 	}
 
 	abbrechen(): void {
-		void this.pi.abort().catch(() => {});
+		this.prozessAbbrechen();
 	}
 
 	/**
@@ -1372,6 +1523,9 @@ export class IdeAcpSession {
 	}
 
 	dispose(): void {
+		const offen = this.frageOffen;
+		this.frageOffen = undefined;
+		offen?.reject(new AbbruchError());
 		this.unsubscribe();
 		this.bridge.schliessen();
 		this.pi.dispose();

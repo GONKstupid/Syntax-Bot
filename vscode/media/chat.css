@@ -169,7 +169,15 @@ body {
 }
 .md code { font-family: inherit; }
 .md :not(pre) > code { background: var(--surface); padding: 0 4px; border-radius: 3px; }
-.md a { color: var(--accent); }
+.md a {
+	color: var(--accent);
+	text-decoration: underline;
+	text-underline-offset: 2px;
+	cursor: pointer;
+	word-break: break-word;
+}
+.md a:hover { text-decoration-thickness: 2px; }
+.md a:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-radius: 2px; }
 .md h1, .md h2, .md h3 { font-size: inherit; text-decoration: underline; margin: 0.5em 0 0.25em; }
 
 /* Code-Block mit Kopfzeile (Sprache + Kopier-Knopf). */
@@ -353,6 +361,15 @@ button.aktion.ja {
 	text-align: right;
 }
 .menueLeer { padding: 6px 8px; color: var(--muted); font-size: 11px; }
+
+/* Chat-Verlauf: Titel oben, Meta (Nachrichten · Datum) darunter — ruhig und
+   lesbar statt gedrängt. */
+.menueEintrag.threadEintrag { flex-wrap: wrap; gap: 2px 8px; }
+.menueEintrag.threadEintrag .menueBeschreibung {
+	margin-left: 0;
+	flex-basis: 100%;
+	text-align: left;
+}
 
 .slashPopup {
 	left: 10px;

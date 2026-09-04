@@ -2,7 +2,7 @@
 	"name": "syntax-bot",
 	"displayName": "Syntax Bot",
 	"description": "Coding-Agent auf Pi-Basis für LRS: korrigiert Rechtschreibung und Syntax, ohne die Logik anzufassen. Komplett eingebettet — keine weiteren Installationen nötig (BYOM: eigenes Modell mitbringen).",
-	"version": "0.4.0",
+	"version": "0.5.0",
 	"publisher": "Gonk",
 	"license": "MIT",
 	"icon": "media/icon.png",
@@ -46,7 +46,7 @@
 			},
 			{
 				"command": "syntaxBot.newSession",
-				"title": "Syntax Bot: Neue Session"
+				"title": "Syntax Bot: Neuer Thread"
 			}
 		]
 	},

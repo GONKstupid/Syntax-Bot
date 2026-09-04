@@ -6,7 +6,7 @@
 
 /* Selbst-Diagnose: Sichtbarer Stempel + alle Fehler landen im Chat und beim
    Extension-Host, statt stumm nichts zu tun. */
-const WEBVIEW_VERSION = "0.4.1";
+const WEBVIEW_VERSION = "0.5.0";
 
 function diagnose(text) {
 	try {
@@ -70,7 +70,7 @@ function menueZeigen(anker, eintraege) {
 	menue.textContent = "";
 	for (const eintrag of eintraege) {
 		const knopf = document.createElement("button");
-		knopf.className = `menueEintrag${eintrag.aktiv ? " aktiv" : ""}`;
+		knopf.className = `menueEintrag${eintrag.aktiv ? " aktiv" : ""}${eintrag.klasse ? ` ${eintrag.klasse}` : ""}`;
 		const titel = document.createElement("span");
 		titel.textContent = eintrag.text;
 		knopf.appendChild(titel);
@@ -116,6 +116,18 @@ document.addEventListener("click", (e) => {
 	}
 });
 
+/* Klickbare Links im Chat (z. B. Browser-Anmeldung) an den Host übergeben:
+   Der öffnet sie per openExternal im System-Browser — ohne Kopieren/Einfügen. */
+document.addEventListener("click", (e) => {
+	const link = e.target.closest?.("a[href]");
+	if (!link) return;
+	const url = link.getAttribute("href") ?? "";
+	if (/^https?:\/\//i.test(url)) {
+		e.preventDefault();
+		sendeAnHost({ type: "openLink", url });
+	}
+});
+
 modusKnopf.addEventListener("click", () => {
 	menueZeigen(modusKnopf, modi.map((m) => ({
 		text: `${punkte(m.id)} ${m.name}`,
@@ -141,19 +153,62 @@ thinkingKnopf.addEventListener("click", () => {
 	})));
 });
 
-/* Kopfzeile: ＋ neuer Thread, ⋯ Menü (Einstellungen & Co. als Commands). */
+/* Kopfzeile: ＋ neuer Thread, ⋯ Menü (Einstellungen, Chat-Verlauf & Co.). */
 
-function neuAktion() {
+/* Verlauf komplett zurücksetzen — für neuen Thread und Thread-Wechsel. */
+function verlaufLeeren() {
 	verlauf.textContent = "";
 	aktuelleAntwort = null;
-	sendeAnHost({ type: "prompt", text: "/new" });
+	denkElement = null;
+	denkBlock = null;
+	setLaufend(false);
+}
+
+/* Neuer Thread: Der Host bricht offene Prozesse ab (z. B. Anmeldung) und
+   leert den Kontext — so bekommt jeder Thread seinen eigenen Kontext. */
+function neuAktion() {
+	verlaufLeeren();
+	sendeAnHost({ type: "newThread" });
 }
 
 neuKnopf.addEventListener("click", neuAktion);
 
+/* Chat-Verlauf: frühere Threads als Menü; ein Klick setzt den Thread fort. */
+function threadMeta(t) {
+	const teile = [];
+	if (t.nachrichten) teile.push(`${t.nachrichten} Nachrichten`);
+	if (t.aktualisiert) {
+		try {
+			teile.push(new Date(t.aktualisiert).toLocaleString("de", { dateStyle: "short", timeStyle: "short" }));
+		} catch { /* Datum ist zweitrangig */ }
+	}
+	if (t.aktiv) teile.push("(gerade offen)");
+	return teile.join(" · ");
+}
+
+function threadsAnzeigen(threads) {
+	const eintraege = (threads ?? []).map((t) => ({
+		text: t.titel || "Thread",
+		beschreibung: threadMeta(t),
+		aktiv: !!t.aktiv,
+		klasse: "threadEintrag",
+		aktion: () => { if (t.pfad) sendeAnHost({ type: "openThread", pfad: t.pfad }); },
+	}));
+	if (eintraege.length === 0) {
+		eintraege.push({
+			text: "Noch keine früheren Threads",
+			beschreibung: "Sie erscheinen hier, sobald es welche gibt.",
+			klasse: "threadEintrag",
+			aktion: () => {},
+		});
+	}
+	menueZeigen(punkteKnopf, eintraege);
+}
+
 punkteKnopf.addEventListener("click", () => {
 	menueZeigen(punkteKnopf, [
 		{ text: "Neuer Thread", beschreibung: "/new", aktion: () => neuAktion() },
+		{ text: "Chat-Verlauf", beschreibung: "Frühere Threads", aktion: () => sendeAnHost({ type: "threads" }) },
 		{ text: "Einstellungen", beschreibung: "/settings", aktion: () => sendeAnHost({ type: "prompt", text: "/settings" }) },
 		{ text: "Thread als Markdown exportieren", beschreibung: ".md", aktion: () => sendeAnHost({ type: "exportMd" }) },
 		{ text: "Hilfe", beschreibung: "/help", aktion: () => sendeAnHost({ type: "prompt", text: "/help" }) },
@@ -578,6 +633,27 @@ window.addEventListener("message", (ereignis) => {
 			// Zug vorbei: offenen Denk-Block einklappen.
 			denkEinklappen();
 			break;
+		case "threads":
+			threadsAnzeigen(n.threads);
+			break;
+		case "threadNeu":
+			verlaufLeeren();
+			break;
+		case "threadGeladen": {
+			// Alten Thread fortsetzen: Verlauf leeren und die gespeicherten
+			// Nachrichten wiederherstellen — der Kontext bleibt erhalten.
+			verlaufLeeren();
+			for (const eintrag of n.verlauf ?? []) {
+				if (eintrag.rolle === "nutzer") {
+					nachrichtHinzufuegen("Du", "nutzer").koerper.textContent = eintrag.text;
+				} else {
+					renderMarkdownIn(nachrichtHinzufuegen("Syntax Bot", "bot").koerper, eintrag.text);
+				}
+			}
+			nachrichtHinzufuegen("", "bot").koerper.textContent =
+				"Thread geladen — du kannst hier direkt weiterarbeiten.";
+			break;
+		}
 		case "error":
 			fehlerAnzeigen(n.text);
 			setLaufend(false);

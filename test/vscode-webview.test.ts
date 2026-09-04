@@ -204,14 +204,64 @@ const KOMMANDOS = [
 	{ name: "settings", description: "Einstellungen" },
 ];
 
-test("Kopzeile: ⋯ zeigt Einstellungen, ＋ sendet /new", (t) => {
+test("Kopzeile: ⋯ zeigt Einstellungen & Chat-Verlauf, ＋ sendet newThread", (t) => {
 	const { dom, gesendet } = webviewStarten(t);
 	dom.window.document.getElementById("punkte").click();
 	const menue = dom.window.document.getElementById("menue");
 	assert.match(menue.textContent, /Einstellungen/);
+	assert.match(menue.textContent, /Chat-Verlauf/);
 
 	dom.window.document.getElementById("neu").click();
-	assert.equal(JSON.stringify(gesendet.at(-1)), JSON.stringify({ type: "prompt", text: "/new" }));
+	assert.equal(JSON.stringify(gesendet.at(-1)), JSON.stringify({ type: "newThread" }));
+});
+
+test("Chat-Verlauf: threads-Nachricht listet Threads, Klick lädt den Thread", (t) => {
+	const { dom, gesendet, empfangen } = webviewStarten(t);
+	empfangen({
+		type: "threads",
+		threads: [
+			{ pfad: "/a/s1.jsonl", id: "s1", titel: "Alter Thread", erstellt: 0, aktualisiert: 1_700_000_000_000, nachrichten: 5, aktiv: false },
+			{ pfad: "/a/s2.jsonl", id: "s2", titel: "Aktuell", erstellt: 0, aktualisiert: 1_700_000_001_000, nachrichten: 2, aktiv: true },
+		],
+	});
+	const menue = dom.window.document.getElementById("menue");
+	assert.equal(menue.hidden, false);
+	assert.match(menue.textContent, /Alter Thread/);
+	assert.match(menue.textContent, /5 Nachrichten/);
+
+	const eintraege = menue.querySelectorAll(".menueEintrag");
+	eintraege[0].dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+	assert.equal(JSON.stringify(gesendet.at(-1)), JSON.stringify({ type: "openThread", pfad: "/a/s1.jsonl" }));
+});
+
+test("threadGeladen stellt den gespeicherten Verlauf wieder her", (t) => {
+	const { dom, empfangen } = webviewStarten(t);
+	empfangen({
+		type: "threadGeladen",
+		verlauf: [
+			{ rolle: "nutzer", text: "Frage aus dem alten Thread" },
+			{ rolle: "agent", text: "Antwort **darauf**" },
+		],
+	});
+	const verlauf = dom.window.document.getElementById("verlauf");
+	assert.match(verlauf.textContent, /Frage aus dem alten Thread/);
+	assert.match(verlauf.textContent, /Antwort darauf/);
+	assert.ok(verlauf.querySelector(".nachricht.nutzer"));
+	assert.ok(verlauf.querySelector(".nachricht.bot"));
+	assert.match(verlauf.textContent, /Thread geladen/);
+});
+
+test("Klickbarer Link im Chat wird an den Host übergeben (openLink)", (t) => {
+	const { dom, gesendet, empfangen } = webviewStarten(t);
+	empfangen({
+		type: "update",
+		update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "🔐 [hier anmelden](https://example.org/anmelden)" } },
+	});
+	const verlauf = dom.window.document.getElementById("verlauf");
+	const link = verlauf.querySelector("a[href='https://example.org/anmelden']");
+	assert.ok(link, "Link fehlt im gerenderten Markdown");
+	link.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+	assert.equal(JSON.stringify(gesendet.at(-1)), JSON.stringify({ type: "openLink", url: "https://example.org/anmelden" }));
 });
 
 test("Berechtigungsdialog: Übernehmen meldet die Auswahl", (t) => {
