@@ -308,7 +308,7 @@ mit Symbol/Text doppelt kodiert (nie Farbe allein, siehe Barrierefreiheit).
 
 | Rolle | Schrift | Lizenz | Anmerkung |
 |---|---|---|---|
-| Display / Headers / Modus-Anzeige | **Doto** | SIL OFL | Punktraster-Schrift (Ryoichi Tsunekawa); funktional nächste offene Entsprechung der Nothing-Ästhetik, selbst kein Zitat einer geschützten Schrift |
+| Display / Headers / Modus-Anzeige | **Doto** | SIL OFL | Punktraster-Schrift (Óliver Lalan); funktional nächste offene Entsprechung der Nothing-Ästhetik, selbst kein Zitat einer geschützten Schrift |
 | Code, Diff, Body | **JetBrains Mono** | SIL OFL 1.1 | Regular + Bold; Ligen deaktiviert |
 | Optional (Barrierefreiheit) | **OpenDyslexic** | SIL OFL 1.1 | Als umschaltbare Body-Alternative für LRS-Nutzer — passt zum Einsatzzweck des Bots |
 

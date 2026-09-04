@@ -36,9 +36,14 @@ Mitverteilung dort). Alle drei stehen unter der SIL Open Font License 1.1
 
 | Schrift | Autor | Lizenz | Upstream |
 |---|---|---|---|
-| **Doto** (Display) | Ryoichi Tsunekawa | SIL OFL 1.1 | <https://fonts.google.com/specimen/Doto> |
+| **Doto** (Display) | Óliver Lalan | SIL OFL 1.1 | <https://fonts.google.com/specimen/Doto> |
 | **JetBrains Mono** (Body/Code) | JetBrains | SIL OFL 1.1 | <https://github.com/JetBrains/JetBrainsMono> |
 | **OpenDyslexic** (ehem. LRS-Option) | Abbie Gonzalez | SIL OFL 1.1 | <https://github.com/antijingoist/opendyslexic> |
+
+Die OFL-Lizenztexte mit Copyright-Vermerken liegen jeweils neben den
+Schriftdateien (`OFL-Doto.txt`, `OFL-JetBrainsMono.txt`,
+`OFL-OpenDyslexic.txt`). Hinweis: „OpenDyslexic" ist ein Reserved Font Name —
+abgeleitete Schriften dürfen ihn ohne Erlaubnis nicht tragen.
 
 Hinweis: Für JetBrains Mono gilt Apache-2.0 nur für die Build-Skripte des
 Upstream-Repos — die Schriftdateien selbst stehen unter OFL 1.1. Herkunft und
